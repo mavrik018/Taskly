@@ -1,0 +1,45 @@
+import 'dart:io';
+import 'package:drift/drift.dart';
+import 'package:drift/native.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
+
+import 'tables/tasks.dart';
+import 'tables/projects.dart';
+
+part 'app_database.g.dart';
+
+@DriftDatabase(tables: [Tasks, Projects])
+class AppDatabase extends _$AppDatabase {
+  AppDatabase() : super(_openConnection());
+
+  @override
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration {
+    return MigrationStrategy(
+      beforeOpen: (details) async {
+        // Enforce foreign keys
+        await customStatement('PRAGMA foreign_keys = ON');
+      },
+      onUpgrade: (m, from, to) async {
+        if (from < 2) {
+          // Recreate tables for the schema upgrade in development
+          for (final table in allTables) {
+            await m.deleteTable(table.aliasedName);
+            await m.createTable(table);
+          }
+        }
+      },
+    );
+  }
+}
+
+QueryExecutor _openConnection() {
+  return LazyDatabase(() async {
+    final dbFolder = await getApplicationDocumentsDirectory();
+    final file = File(p.join(dbFolder.path, 'taskflow.sqlite'));
+    return NativeDatabase.createInBackground(file);
+  });
+}
