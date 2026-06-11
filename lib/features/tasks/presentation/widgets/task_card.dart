@@ -3,7 +3,6 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../domain/entities/task.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
-import '../../../../core/theme/app_radius.dart';
 import '../../../../core/utils/rich_text_parser.dart';
 import '../../../../core/utils/date_formatter.dart';
 import 'swipe_action_wrapper.dart';
@@ -22,25 +21,14 @@ class TaskCard extends StatelessWidget {
     required this.onTap,
   });
 
-  Color _priorityColor(int priority) {
-    switch (priority) {
-      case 1:
-        return AppColors.priorityHigh;
-      case 2:
-        return AppColors.priorityMedium;
-      case 3:
-        return AppColors.priorityLow;
-      default:
-        return Colors.transparent;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final accentColor =
-        task.priority < 4 ? _priorityColor(task.priority) : AppColors.primary;
+
+    // Priority accent color
+    final Color priorityColor = _getPriorityColor(task.priority);
+    final bool hasPriority = task.priority < 4;
 
     return SwipeActionWrapper(
       isCompleted: task.isCompleted,
@@ -49,150 +37,109 @@ class TaskCard extends StatelessWidget {
       child: Padding(
         padding: EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
-          vertical: AppSpacing.xxs + 1,
+          vertical: AppSpacing.xs,
         ),
         child: GestureDetector(
           onTap: onTap,
-          child: Container(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOut,
             decoration: BoxDecoration(
-              color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-              borderRadius: AppRadius.borderXL,
+              color: task.isCompleted
+                  ? (isDark
+                      ? AppColors.darkSurface.withOpacity(0.3)
+                      : AppColors.lightSurface.withOpacity(0.4))
+                  : (isDark ? AppColors.darkSurface : AppColors.lightSurface),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: task.isCompleted
-                    ? (isDark
-                        ? AppColors.darkBorder.withOpacity(0.4)
-                        : AppColors.lightBorder.withOpacity(0.5))
-                    : (isDark
-                        ? AppColors.darkBorder
-                        : AppColors.lightBorder),
-                width: 0.5,
+                color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                width: 1.0,
               ),
             ),
             child: IntrinsicHeight(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Priority left accent bar
-                  if (!task.isCompleted && task.priority < 4)
+                  // Priority accent stripe (left side)
+                  if (hasPriority && !task.isCompleted)
                     Container(
-                      width: 3,
+                      width: 4,
+                      margin: const EdgeInsets.symmetric(vertical: 12),
                       decoration: BoxDecoration(
-                        color: accentColor,
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(AppRadius.xl),
-                          bottomLeft: Radius.circular(AppRadius.xl),
+                        color: priorityColor,
+                        borderRadius: const BorderRadius.only(
+                          topRight: Radius.circular(4),
+                          bottomRight: Radius.circular(4),
                         ),
                       ),
                     ),
-                  // Check button
-                  Padding(
-                    padding: EdgeInsets.only(
-                      left: (!task.isCompleted && task.priority < 4) ? 8 : 4,
-                      right: 4,
-                    ),
-                    child: Center(
-                      child: IconButton(
-                        onPressed: onToggle,
-                        splashRadius: 20,
-                        padding: EdgeInsets.zero,
-                        constraints:
-                            const BoxConstraints(minWidth: 36, minHeight: 36),
-                        icon: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 200),
-                          child: Icon(
-                            task.isCompleted
-                                ? Icons.check_circle_rounded
-                                : Icons.circle_outlined,
-                            key: ValueKey(task.isCompleted),
-                            color: task.isCompleted
-                                ? AppColors.primary.withOpacity(0.55)
-                                : (isDark
-                                    ? AppColors.darkTextSecondary
-                                    : AppColors.lightTextSecondary),
-                            size: 22,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Task content
+
+                  // Main content
                   Expanded(
                     child: Padding(
-                      padding: EdgeInsets.only(
-                        top: AppSpacing.sm,
-                        bottom: AppSpacing.sm,
-                        right: AppSpacing.md,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                        vertical: AppSpacing.md,
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          // Title
-                          Text.rich(
-                            TextSpan(
-                              children: RichTextParser.parse(
-                                task.title,
-                                TextStyle(
-                                  fontSize: 14.sp,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: -0.1,
-                                  decoration: task.isCompleted
-                                      ? TextDecoration.lineThrough
-                                      : null,
-                                  color: task.isCompleted
-                                      ? (isDark
-                                              ? AppColors.darkTextPrimary
-                                              : AppColors.lightTextPrimary)
-                                          .withOpacity(0.38)
-                                      : (isDark
-                                          ? AppColors.darkTextPrimary
-                                          : AppColors.lightTextPrimary),
-                                ),
-                              ),
-                            ),
-                          ),
-                          // Description
-                          if (task.description != null &&
-                              task.description!.isNotEmpty) ...[
-                            SizedBox(height: 3.h),
-                            Text(
-                              task.description!,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 12.sp,
-                                color: task.isCompleted
-                                    ? (isDark
-                                            ? AppColors.darkTextSecondary
-                                            : AppColors.lightTextSecondary)
-                                        .withOpacity(0.4)
-                                    : (isDark
-                                            ? AppColors.darkTextSecondary
-                                            : AppColors.lightTextSecondary)
-                                        .withOpacity(0.85),
-                                height: 1.4,
-                              ),
-                            ),
-                          ],
-                          // Metadata chips row
-                          if (task.dueDate != null || task.priority < 4) ...[
-                            SizedBox(height: AppSpacing.h_xs),
-                            Row(
+                          // Task content
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                if (task.priority < 4) ...[
-                                  _PriorityChip(
-                                    priority: task.priority,
-                                    isCompleted: task.isCompleted,
+                                // Priority Label
+                                if (hasPriority && !task.isCompleted) ...[
+                                  Text(
+                                    _getPriorityLabel(task.priority),
+                                    style:
+                                        theme.textTheme.labelMedium?.copyWith(
+                                      color: priorityColor,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12.sp,
+                                    ),
                                   ),
-                                  SizedBox(width: AppSpacing.xxs + 2),
+                                  SizedBox(height: 4.sp),
                                 ],
-                                if (task.dueDate != null)
-                                  _DueDateChip(
-                                    task: task,
-                                    isDark: isDark,
+
+                                // Title
+                                Text(
+                                  task.title,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    decoration: task.isCompleted
+                                        ? TextDecoration.lineThrough
+                                        : null,
+                                    color: task.isCompleted
+                                        ? theme.textTheme.bodyLarge?.color
+                                            ?.withOpacity(0.3)
+                                        : theme.textTheme.bodyLarge?.color,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 16.sp,
                                   ),
+                                ),
+
+                                // Time / Due Date
+                                if (task.dueDate != null) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${DateFormatter.formatRelativeDay(task.dueDate!)}, ${DateFormatter.formatTime(task.dueDate!)}${task.dueDate!.hour == 0 && task.dueDate!.minute == 0 ? ' (Anytime)' : ''}',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: theme.textTheme.bodySmall?.color
+                                          ?.withValues(alpha: 0.4),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
-                          ],
+                          ),
+
+                          // Checkbox button
+                          _CheckboxButton(
+                            isCompleted: task.isCompleted,
+                            onToggle: onToggle,
+                          ),
                         ],
                       ),
                     ),
@@ -205,87 +152,73 @@ class TaskCard extends StatelessWidget {
       ),
     );
   }
-}
 
-class _PriorityChip extends StatelessWidget {
-  final int priority;
-  final bool isCompleted;
-
-  const _PriorityChip({required this.priority, required this.isCompleted});
-
-  @override
-  Widget build(BuildContext context) {
-    final String label;
-    final Color color;
+  Color _getPriorityColor(int priority) {
     switch (priority) {
       case 1:
-        label = 'High';
-        color = AppColors.priorityHigh;
-        break;
+        return AppColors.priorityHigh;
       case 2:
-        label = 'Med';
-        color = AppColors.priorityMedium;
-        break;
+        return AppColors.priorityMedium;
       case 3:
-        label = 'Low';
-        color = AppColors.priorityLow;
-        break;
+        return AppColors.priorityLow;
       default:
-        return const SizedBox.shrink();
+        return AppColors.priorityNone;
     }
+  }
 
-    final effectiveColor = isCompleted ? color.withOpacity(0.35) : color;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(
-        color: effectiveColor.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: effectiveColor.withOpacity(0.25), width: 0.5),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: effectiveColor,
-          fontSize: 10.sp,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.1,
-        ),
-      ),
-    );
+  String _getPriorityLabel(int priority) {
+    switch (priority) {
+      case 1:
+        return 'High Priority';
+      case 2:
+        return 'Medium Priority';
+      case 3:
+        return 'Low Priority';
+      default:
+        return '';
+    }
   }
 }
 
-class _DueDateChip extends StatelessWidget {
-  final Task task;
-  final bool isDark;
+class _CheckboxButton extends StatelessWidget {
+  final bool isCompleted;
+  final VoidCallback onToggle;
 
-  const _DueDateChip({required this.task, required this.isDark});
+  const _CheckboxButton({
+    required this.isCompleted,
+    required this.onToggle,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final dateText =
-        '${DateFormatter.formatRelativeDay(task.dueDate!)}${task.dueDate!.hour == 0 && task.dueDate!.minute == 0 ? '' : ' · ${DateFormatter.formatTime(task.dueDate!)}'}';
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
-    final color = task.isCompleted
-        ? (isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary)
-            .withOpacity(0.4)
-        : AppColors.primary.withOpacity(0.80);
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(Icons.schedule_rounded, size: 11, color: color),
-        const SizedBox(width: 3),
-        Text(
-          dateText,
-          style: TextStyle(
-            fontSize: 11.sp,
-            fontWeight: FontWeight.w500,
-            color: color,
+    return GestureDetector(
+      onTap: onToggle,
+      child: Container(
+        width: 24,
+        height: 24,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isCompleted
+                ? (isDark ? Colors.white24 : Colors.black12)
+                : (isDark ? Colors.white38 : Colors.black26),
+            width: 1.5,
           ),
+          color: isCompleted
+              ? (isDark ? Colors.white10 : Colors.black.withOpacity(0.05))
+              : Colors.transparent,
         ),
-      ],
+        child: isCompleted
+            ? Icon(
+                Icons.check_rounded,
+                size: 16,
+                color: isDark ? Colors.white70 : Colors.black87,
+              )
+            : null,
+      ),
     );
   }
 }

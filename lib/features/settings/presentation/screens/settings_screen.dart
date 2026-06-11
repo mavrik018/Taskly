@@ -1,13 +1,15 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:taskflow/core/theme/theme_provider.dart';
+import 'package:taskflow/features/onboarding/presentation/controllers/onboarding_provider.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/theme/app_radius.dart';
+import '../controllers/settings_provider.dart';
+import '../../../tasks/presentation/controllers/tasks_provider.dart';
+import '../../../../core/utils/notification_manager.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -15,578 +17,366 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final themeMode = ref.watch(themeModeProvider);
+    final isDarkMode = ref.watch(themeModeProvider);
+    final settingsState = ref.watch(settingsProvider);
+    final db = ref.watch(databaseProvider);
+    final onboardingState = ref.watch(onboardingProvider);
+    final userName = onboardingState.value?.userName ?? 'Productivity Champ';
 
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      body: CustomScrollView(
-        slivers: [
-          // ── Inline Header ─────────────────────────────────────────────
-          SliverPersistentHeader(
-            pinned: true,
-            delegate: _SettingsHeaderDelegate(isDark: isDark),
+      appBar: AppBar(
+        centerTitle: true,
+        title: Text(
+          'TaskFlow',
+          style: theme.textTheme.headlineLarge?.copyWith(
+            fontWeight: FontWeight.w900,
+            color: theme.colorScheme.onSurface,
           ),
-
-          SliverToBoxAdapter(child: SizedBox(height: AppSpacing.h_sm)),
-
-          // ── PREFERENCES Section ───────────────────────────────────────
-          SliverToBoxAdapter(
-            child: _SectionLabel(label: 'PREFERENCES').animate().fadeIn(
-                duration: 300.ms, delay: 80.ms),
+        ),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.md,
           ),
-          SliverToBoxAdapter(child: SizedBox(height: AppSpacing.h_xs)),
-          SliverToBoxAdapter(
-            child: _SettingsCard(
-              isDark: isDark,
-              children: [
-                _AppearanceRow(
-                  isDark: isDark,
-                  themeMode: themeMode,
-                  onChanged: (newMode) {
-                    HapticFeedback.lightImpact();
-                    ref.read(themeModeProvider.notifier).setThemeMode(newMode);
-                  },
+          children: [
+            // User Profile Card
+            Card(
+              child: Padding(
+                padding: EdgeInsets.all(AppSpacing.md),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 48.w,
+                      height: 48.h,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(16.r),
+                      ),
+                      child: Center(
+                        child: Text(
+                          userName.isNotEmpty
+                              ? userName.substring(0, 1).toUpperCase()
+                              : 'U',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18.sp,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: AppSpacing.md),
+                    Text(
+                      userName,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ).animate().fadeIn(duration: 350.ms, delay: 100.ms).slideY(
-                  begin: 0.05,
-                  end: 0,
-                  duration: 350.ms,
-                  delay: 100.ms,
-                  curve: Curves.easeOutCubic,
-                ),
-          ),
+              ),
+            ),
+            SizedBox(height: AppSpacing.md),
 
-          SliverToBoxAdapter(child: SizedBox(height: AppSpacing.h_md)),
+            // General Section
+            Text(
+              'GENERAL',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.secondary,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
+              ),
+            ),
+            SizedBox(height: AppSpacing.sm),
+            Card(
+              child: Column(
+                children: [
+                  _buildSettingItem(
+                    context: context,
+                    icon: isDarkMode
+                        ? Icons.dark_mode_outlined
+                        : Icons.light_mode_outlined,
+                    title: 'Appearance',
+                    trailing: Switch(
+                      value: isDarkMode,
+                      onChanged: (value) {
+                        HapticFeedback.lightImpact();
+                        ref.read(themeModeProvider.notifier).toggleTheme();
+                      },
+                    ),
+                  ),
+                  Divider(height: 1, indent: 56.w),
+                  _buildSettingItem(
+                    context: context,
+                    icon: Icons.notifications_outlined,
+                    title: 'Notifications',
+                    trailing: Switch(
+                      value: settingsState.notificationsEnabled,
+                      onChanged: (value) async {
+                        HapticFeedback.lightImpact();
+                        if (value) {
+                          final granted =
+                              await NotificationManager.requestPermissions(
+                                  context);
+                          if (!granted) return;
+                        }
+                        ref
+                            .read(settingsProvider.notifier)
+                            .toggleNotifications(value);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: AppSpacing.md),
 
-          // ── SUPPORT Section ───────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: _SectionLabel(label: 'SUPPORT').animate().fadeIn(
-                duration: 300.ms, delay: 160.ms),
-          ),
-          SliverToBoxAdapter(child: SizedBox(height: AppSpacing.h_xs)),
-          SliverToBoxAdapter(
-            child: _SettingsCard(
-              isDark: isDark,
-              children: [
-                _SettingsRow(
-                  icon: Icons.star_outline_rounded,
-                  iconColor: const Color(0xFFF59E0B),
-                  label: 'Rate TaskFlow',
-                  isDark: isDark,
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Thank you for rating!')),
-                    );
-                  },
-                ),
-                _HairlineDivider(isDark: isDark),
-                _SettingsRow(
-                  icon: Icons.chat_bubble_outline_rounded,
-                  iconColor: AppColors.primary,
-                  label: 'Feedback & Support',
-                  isDark: isDark,
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Opening support...')),
-                    );
-                  },
-                ),
-              ],
-            ).animate().fadeIn(duration: 350.ms, delay: 180.ms).slideY(
-                  begin: 0.05,
-                  end: 0,
-                  duration: 350.ms,
-                  delay: 180.ms,
-                  curve: Curves.easeOutCubic,
-                ),
-          ),
+            // Account Section
+            Text(
+              'ACCOUNT',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.secondary,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
+              ),
+            ),
+            SizedBox(height: AppSpacing.sm),
+            Card(
+              child: Column(
+                children: [
+                  _buildSettingItem(
+                    context: context,
+                    icon: Icons.person_outline,
+                    title: 'Personal Information',
+                    trailing: Icon(Icons.chevron_right,
+                        color: theme.colorScheme.secondary),
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      showDialog(
+                        context: context,
+                        builder: (context) {
+                          final controller =
+                              TextEditingController(text: userName);
+                          return AlertDialog(
+                            title: const Text('Edit Name'),
+                            content: TextField(
+                              controller: controller,
+                              decoration:
+                                  const InputDecoration(labelText: 'Name'),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('Cancel'),
+                              ),
+                              TextButton(
+                                onPressed: () async {
+                                  if (controller.text.trim().isNotEmpty) {
+                                    await ref
+                                        .read(onboardingProvider.notifier)
+                                        .updateUserName(controller.text.trim());
+                                    if (context.mounted) Navigator.pop(context);
+                                  }
+                                },
+                                child: const Text('Save'),
+                              ),
+                            ],
+                          );
+                        },
+                      );
+                    },
+                  ),
+                  // Divider(height: 1, indent: 56.w),
+                  // _buildSettingItem(
+                  //   context: context,
+                  //   icon: Icons.subscriptions_outlined,
+                  //   title: 'Subscription',
+                  //   trailing: Row(
+                  //     mainAxisSize: MainAxisSize.min,
+                  //     children: [
+                  //       Container(
+                  //         padding: EdgeInsets.symmetric(
+                  //             horizontal: 8.w, vertical: 4.h),
+                  //         decoration: BoxDecoration(
+                  //           color: AppColors.primary,
+                  //           borderRadius: BorderRadius.circular(6.r),
+                  //         ),
+                  //         child: Text(
+                  //           settingsState.subscriptionTier,
+                  //           style: TextStyle(
+                  //             color: Colors.white,
+                  //             fontSize: 10.sp,
+                  //             fontWeight: FontWeight.bold,
+                  //           ),
+                  //         ),
+                  //       ),
+                  //       SizedBox(width: 4.w),
+                  //       Icon(Icons.chevron_right,
+                  //           color: theme.colorScheme.secondary),
+                  //     ],
+                  //   ),
+                  //   onTap: () {
+                  //     HapticFeedback.lightImpact();
+                  //     showDialog(
+                  //       context: context,
+                  //       builder: (context) {
+                  //         return AlertDialog(
+                  //           title: const Text('Subscription Plan'),
+                  //           content: Column(
+                  //             mainAxisSize: MainAxisSize.min,
+                  //             children: [
+                  //               ListTile(
+                  //                 title: const Text('FREE Plan'),
+                  //                 subtitle: const Text(
+                  //                     'Standard access, up to 5 projects'),
+                  //                 leading: Radio<String>(
+                  //                   value: 'FREE',
+                  //                   groupValue: settingsState.subscriptionTier,
+                  //                   onChanged: (value) async {
+                  //                     if (value != null) {
+                  //                       await ref
+                  //                           .read(settingsProvider.notifier)
+                  //                           .setSubscriptionTier(value);
+                  //                       if (context.mounted)
+                  //                         Navigator.pop(context);
+                  //                     }
+                  //                   },
+                  //                 ),
+                  //               ),
+                  //               ListTile(
+                  //                 title: const Text('PRO Plan'),
+                  //                 subtitle: const Text(
+                  //                     'Unlimited projects & priority support'),
+                  //                 leading: Radio<String>(
+                  //                   value: 'PRO',
+                  //                   groupValue: settingsState.subscriptionTier,
+                  //                   onChanged: (value) async {
+                  //                     if (value != null) {
+                  //                       await ref
+                  //                           .read(settingsProvider.notifier)
+                  //                           .setSubscriptionTier(value);
+                  //                       if (context.mounted)
+                  //                         Navigator.pop(context);
+                  //                     }
+                  //                   },
+                  //                 ),
+                  //               ),
+                  //             ],
+                  //           ),
+                  //         );
+                  //       },
+                  //     );
+                  //   },
+                  // ),
+                ],
+              ),
+            ),
+            SizedBox(height: AppSpacing.md),
 
-          SliverToBoxAdapter(child: SizedBox(height: AppSpacing.h_md)),
-
-          // ── ABOUT Section ─────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: _SectionLabel(label: 'ABOUT').animate().fadeIn(
-                duration: 300.ms, delay: 240.ms),
-          ),
-          SliverToBoxAdapter(child: SizedBox(height: AppSpacing.h_xs)),
-          SliverToBoxAdapter(
-            child: _SettingsCard(
-              isDark: isDark,
-              children: [
-                _SettingsRow(
-                  icon: Icons.info_outline_rounded,
-                  iconColor: const Color(0xFF6366F1),
-                  label: 'Version',
-                  isDark: isDark,
-                  trailing: _VersionBadge(isDark: isDark),
+            // Clear All Data
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.priorityHigh,
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(vertical: 14.h),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: AppRadius.borderLG,
+                  ),
                 ),
-              ],
-            ).animate().fadeIn(duration: 350.ms, delay: 260.ms).slideY(
-                  begin: 0.05,
-                  end: 0,
-                  duration: 350.ms,
-                  delay: 260.ms,
-                  curve: Curves.easeOutCubic,
+                onPressed: () async {
+                  HapticFeedback.heavyImpact();
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: Text('Clear All Data?'),
+                      content: Text(
+                          'This action is irreversible. All tasks and projects will be deleted.'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(false),
+                          child: Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(true),
+                          child: Text('Clear',
+                              style: TextStyle(color: AppColors.priorityHigh)),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    await ref.read(settingsProvider.notifier).clearAllData(db);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('All data cleared!')),
+                      );
+                    }
+                  }
+                },
+                child: Text(
+                  'Clear All Data',
+                  style: TextStyle(
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-          ),
+              ),
+            ),
+            SizedBox(height: AppSpacing.lg),
 
-          // ── Bottom spacer for nav bar clearance ───────────────────────
-          SliverToBoxAdapter(child: SizedBox(height: 120.h)),
-        ],
+            // Version Info
+            Center(
+              child: Text(
+                'Version 1.0.0 (Build 1)',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: theme.colorScheme.secondary,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
-}
 
-// ─── Settings Sliver Header ──────────────────────────────────────────────────
-
-class _SettingsHeaderDelegate extends SliverPersistentHeaderDelegate {
-  final bool isDark;
-  const _SettingsHeaderDelegate({required this.isDark});
-
-  @override
-  double get minExtent => 60;
-  @override
-  double get maxExtent => 100;
-
-  @override
-  Widget build(
-      BuildContext context, double shrinkOffset, bool overlapsContent) {
-    final t = (shrinkOffset / maxExtent).clamp(0.0, 1.0);
-    final isCollapsed = t > 0.5;
+  Widget _buildSettingItem({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+    required Widget trailing,
+    VoidCallback? onTap,
+  }) {
     final theme = Theme.of(context);
 
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(
-          sigmaX: overlapsContent ? 16 : 0,
-          sigmaY: overlapsContent ? 16 : 0,
-        ),
-        child: Container(
-          color: theme.scaffoldBackgroundColor
-              .withOpacity(overlapsContent ? 0.88 : 1.0),
-          padding: EdgeInsets.only(
-            top: MediaQuery.of(context).padding.top + 6,
-            left: AppSpacing.md,
-            right: AppSpacing.md,
-            bottom: 10,
-          ),
-          child: AnimatedCrossFade(
-            duration: const Duration(milliseconds: 200),
-            firstChild: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Settings',
-                  style: TextStyle(
-                    fontSize: 26.sp,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.6,
-                    color: isDark
-                        ? AppColors.darkTextPrimary
-                        : AppColors.lightTextPrimary,
-                  ),
-                ),
-                Text(
-                  'Customize your experience',
-                  style: TextStyle(
-                    fontSize: 12.sp,
-                    color: isDark
-                        ? AppColors.darkTextSecondary
-                        : AppColors.lightTextSecondary,
-                  ),
-                ),
-              ],
-            ),
-            secondChild: Row(
-              children: [
-                Text(
-                  'Settings',
-                  style: TextStyle(
-                    fontSize: 17.sp,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.3,
-                    color: isDark
-                        ? AppColors.darkTextPrimary
-                        : AppColors.lightTextPrimary,
-                  ),
-                ),
-              ],
-            ),
-            crossFadeState: isCollapsed
-                ? CrossFadeState.showSecond
-                : CrossFadeState.showFirst,
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  bool shouldRebuild(covariant _SettingsHeaderDelegate oldDelegate) =>
-      isDark != oldDelegate.isDark;
-}
-
-// ─── Settings Card ───────────────────────────────────────────────────────────
-
-class _SettingsCard extends StatelessWidget {
-  final bool isDark;
-  final List<Widget> children;
-
-  const _SettingsCard({required this.isDark, required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
-      child: Container(
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-          borderRadius: AppRadius.borderXL,
-          border: Border.all(
-            color: isDark
-                ? AppColors.darkBorder
-                : AppColors.lightBorder,
-            width: 0.5,
-          ),
-        ),
-        child: ClipRRect(
-          borderRadius: AppRadius.borderXL,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: children,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Section Label ───────────────────────────────────────────────────────────
-
-class _SectionLabel extends StatelessWidget {
-  final String label;
-  const _SectionLabel({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Padding(
-      padding: EdgeInsets.symmetric(
-          horizontal: AppSpacing.md + 4, vertical: 0),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 10.5.sp,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.9,
-          color: isDark
-              ? AppColors.darkTextSecondary
-              : AppColors.lightTextSecondary,
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Hairline Divider ─────────────────────────────────────────────────────────
-
-class _HairlineDivider extends StatelessWidget {
-  final bool isDark;
-  const _HairlineDivider({required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 56),
-      child: Container(
-        height: 0.5,
-        color: isDark
-            ? AppColors.darkBorder
-            : AppColors.lightBorder,
-      ),
-    );
-  }
-}
-
-// ─── Settings Row ─────────────────────────────────────────────────────────────
-
-class _SettingsRow extends StatefulWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String label;
-  final bool isDark;
-  final VoidCallback? onTap;
-  final Widget? trailing;
-
-  const _SettingsRow({
-    required this.icon,
-    required this.iconColor,
-    required this.label,
-    required this.isDark,
-    this.onTap,
-    this.trailing,
-  });
-
-  @override
-  State<_SettingsRow> createState() => _SettingsRowState();
-}
-
-class _SettingsRowState extends State<_SettingsRow> {
-  bool _isPressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: widget.onTap != null ? (_) => setState(() => _isPressed = true) : null,
-      onTapUp: widget.onTap != null
-          ? (_) {
-              setState(() => _isPressed = false);
-              widget.onTap!();
-            }
-          : null,
-      onTapCancel:
-          widget.onTap != null ? () => setState(() => _isPressed = false) : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 100),
-        color: _isPressed
-            ? (widget.isDark
-                ? Colors.white.withOpacity(0.04)
-                : Colors.black.withOpacity(0.03))
-            : Colors.transparent,
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
         padding: EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
           vertical: AppSpacing.sm,
         ),
         child: Row(
           children: [
-            // Icon container
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: widget.iconColor.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(widget.icon, color: widget.iconColor, size: 16),
+            Icon(
+              icon,
+              color: theme.colorScheme.onSurface.withOpacity(0.8),
+              size: 24.sp,
             ),
-            SizedBox(width: AppSpacing.sm),
-            // Label
+            SizedBox(width: AppSpacing.md),
             Expanded(
               child: Text(
-                widget.label,
-                style: TextStyle(
-                  fontSize: 14.sp,
+                title,
+                style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w500,
-                  color: widget.isDark
-                      ? AppColors.darkTextPrimary
-                      : AppColors.lightTextPrimary,
                 ),
               ),
             ),
-            // Trailing
-            if (widget.trailing != null)
-              widget.trailing!
-            else if (widget.onTap != null)
-              Icon(
-                Icons.chevron_right_rounded,
-                size: 18,
-                color: widget.isDark
-                    ? AppColors.darkTextSecondary
-                    : AppColors.lightTextSecondary,
-              ),
+            trailing,
           ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Appearance Row ───────────────────────────────────────────────────────────
-
-class _AppearanceRow extends StatelessWidget {
-  final bool isDark;
-  final ThemeMode themeMode;
-  final ValueChanged<ThemeMode> onChanged;
-
-  const _AppearanceRow({
-    required this.isDark,
-    required this.themeMode,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.all(AppSpacing.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  themeMode == ThemeMode.light
-                      ? Icons.light_mode_rounded
-                      : themeMode == ThemeMode.dark
-                          ? Icons.dark_mode_rounded
-                          : Icons.auto_awesome_rounded,
-                  color: AppColors.primary,
-                  size: 16,
-                ),
-              ),
-              SizedBox(width: AppSpacing.sm),
-              Text(
-                'Appearance',
-                style: TextStyle(
-                  fontSize: 14.sp,
-                  fontWeight: FontWeight.w500,
-                  color: isDark
-                      ? AppColors.darkTextPrimary
-                      : AppColors.lightTextPrimary,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: AppSpacing.h_sm),
-          // Custom segmented control
-          Row(
-            children: [
-              _ThemeSegment(
-                value: ThemeMode.system,
-                label: 'System',
-                icon: Icons.auto_awesome_rounded,
-                selected: themeMode == ThemeMode.system,
-                isDark: isDark,
-                onTap: () => onChanged(ThemeMode.system),
-              ),
-              SizedBox(width: AppSpacing.xs),
-              _ThemeSegment(
-                value: ThemeMode.light,
-                label: 'Light',
-                icon: Icons.light_mode_rounded,
-                selected: themeMode == ThemeMode.light,
-                isDark: isDark,
-                onTap: () => onChanged(ThemeMode.light),
-              ),
-              SizedBox(width: AppSpacing.xs),
-              _ThemeSegment(
-                value: ThemeMode.dark,
-                label: 'Dark',
-                icon: Icons.dark_mode_rounded,
-                selected: themeMode == ThemeMode.dark,
-                isDark: isDark,
-                onTap: () => onChanged(ThemeMode.dark),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ThemeSegment extends StatelessWidget {
-  final ThemeMode value;
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final bool isDark;
-  final VoidCallback onTap;
-
-  const _ThemeSegment({
-    required this.value,
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.isDark,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutCubic,
-          padding: EdgeInsets.symmetric(vertical: AppSpacing.xs),
-          decoration: BoxDecoration(
-            color: selected
-                ? AppColors.primary
-                : (isDark
-                    ? Colors.white.withOpacity(0.05)
-                    : Colors.black.withOpacity(0.04)),
-            borderRadius: AppRadius.borderMD,
-          ),
-          child: Column(
-            children: [
-              Icon(
-                icon,
-                size: 16,
-                color: selected
-                    ? Colors.white
-                    : (isDark
-                        ? AppColors.darkTextSecondary
-                        : AppColors.lightTextSecondary),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11.sp,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                  color: selected
-                      ? Colors.white
-                      : (isDark
-                          ? AppColors.darkTextSecondary
-                          : AppColors.lightTextSecondary),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Version Badge ────────────────────────────────────────────────────────────
-
-class _VersionBadge extends StatelessWidget {
-  final bool isDark;
-  const _VersionBadge({required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withOpacity(0.07)
-            : Colors.black.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        'v1.0.0',
-        style: TextStyle(
-          fontSize: 11.sp,
-          fontWeight: FontWeight.w600,
-          color: isDark
-              ? AppColors.darkTextSecondary
-              : AppColors.lightTextSecondary,
         ),
       ),
     );

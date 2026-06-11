@@ -78,11 +78,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
-            // In back button handler
             ref.read(searchQueryProvider.notifier).set('');
             ref.read(activeSearchFilterProvider.notifier).set(SearchFilter.all);
-            SearchFilter.all;
-            context.pop();
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/');
+            }
           },
         ),
         title: TextField(

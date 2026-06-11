@@ -1,12 +1,11 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import '../widgets/empty_state.dart';
-import '../widgets/progress_bar.dart';
 import '../../../tasks/presentation/controllers/tasks_provider.dart';
 import '../../../tasks/domain/entities/task.dart';
 import '../../../tasks/presentation/widgets/task_card.dart';
@@ -14,9 +13,8 @@ import '../../../tasks/presentation/screens/task_detail_screen.dart';
 import '../../../onboarding/presentation/controllers/onboarding_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
-import '../../../../core/theme/app_radius.dart';
-import '../../../../core/routing/app_routes.dart';
 import '../../../../core/utils/confetti_service.dart';
+import '../../../../core/theme/theme_provider.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -28,25 +26,20 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen>
     with SingleTickerProviderStateMixin {
   bool _isUpcomingExpanded = false;
-  late AnimationController _chevronController;
-  late Animation<double> _chevronRotation;
+  late AnimationController _greetingController;
 
   @override
   void initState() {
     super.initState();
-    _chevronController = AnimationController(
+    _greetingController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _chevronRotation =
-        Tween<double>(begin: 0.0, end: 0.5).animate(
-      CurvedAnimation(parent: _chevronController, curve: Curves.easeOutCubic),
-    );
+      duration: const Duration(milliseconds: 800),
+    )..forward();
   }
 
   @override
   void dispose() {
-    _chevronController.dispose();
+    _greetingController.dispose();
     super.dispose();
   }
 
@@ -58,39 +51,49 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     return 'Good night';
   }
 
-  String _getFormattedDate() {
-    final now = DateTime.now();
-    const weekdays = [
-      'Monday', 'Tuesday', 'Wednesday', 'Thursday',
-      'Friday', 'Saturday', 'Sunday'
-    ];
-    const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
-    ];
-    return '${weekdays[now.weekday - 1]}, ${months[now.month - 1]} ${now.day}';
+  String _getGreetingEmoji() {
+    final hour = DateTime.now().hour;
+    if (hour >= 5 && hour < 12) return '☀️';
+    if (hour >= 12 && hour < 17) return '🌤️';
+    if (hour >= 17 && hour < 21) return '🌆';
+    return '🌙';
   }
 
   String _getWeekdayName(DateTime date) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final diff = DateTime(date.year, date.month, date.day).difference(today).inDays;
+    final diff =
+        DateTime(date.year, date.month, date.day).difference(today).inDays;
     if (diff == 1) return 'Tomorrow';
-    const weekdays = [
-      'Monday', 'Tuesday', 'Wednesday', 'Thursday',
-      'Friday', 'Saturday', 'Sunday'
-    ];
-    return weekdays[date.weekday - 1];
+    switch (date.weekday) {
+      case 1:
+        return 'Monday';
+      case 2:
+        return 'Tuesday';
+      case 3:
+        return 'Wednesday';
+      case 4:
+        return 'Thursday';
+      case 5:
+        return 'Friday';
+      case 6:
+        return 'Saturday';
+      case 7:
+        return 'Sunday';
+      default:
+        return 'Upcoming';
+    }
   }
 
-  void _toggleUpcoming() {
+  void _openTask(BuildContext context, {Task? task}) {
     HapticFeedback.lightImpact();
-    setState(() => _isUpcomingExpanded = !_isUpcomingExpanded);
-    if (_isUpcomingExpanded) {
-      _chevronController.forward();
-    } else {
-      _chevronController.reverse();
-    }
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      useSafeArea: true,
+      builder: (context) => TaskDetailScreen(task: task),
+    );
   }
 
   @override
@@ -100,621 +103,522 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final userName = onboardingStateAsync.value?.userName ?? 'there';
+    final userName =
+        onboardingStateAsync.value?.userName ?? 'Productivity Champ';
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       body: tasksAsync.when(
         data: (tasks) {
-          final now = DateTime.now();
-          final today = DateTime(now.year, now.month, now.day);
-          final upcomingLimit = today.add(const Duration(days: 8));
+          final activeTasks = tasks.where((t) => !t.isCompleted).toList()
+            ..sort((a, b) {
+              if (a.dueDate == null && b.dueDate == null) return 0;
+              if (a.dueDate == null) return 1;
+              if (b.dueDate == null) return -1;
+              return a.dueDate!.compareTo(b.dueDate!);
+            });
 
-          final todayTasks = tasks.where((t) {
-            if (t.dueDate == null) return false;
-            final date = DateTime(t.dueDate!.year, t.dueDate!.month, t.dueDate!.day);
-            final isSameDay = date.isAtSameMomentAs(today);
-            final isOverdueIncomplete = date.isBefore(today) && !t.isCompleted;
-            return isSameDay || isOverdueIncomplete;
-          }).toList();
+          final completedTasks = tasks.where((t) => t.isCompleted).toList()
+            ..sort((a, b) {
+              if (a.dueDate == null && b.dueDate == null) return 0;
+              if (a.dueDate == null) return 1;
+              if (b.dueDate == null) return -1;
+              return a.dueDate!.compareTo(b.dueDate!);
+            });
 
-          final upcomingTasks = tasks.where((t) {
-            if (t.dueDate == null) return false;
-            final date = DateTime(t.dueDate!.year, t.dueDate!.month, t.dueDate!.day);
-            return date.isAfter(today) && date.isBefore(upcomingLimit);
-          }).toList();
-
-          final completedTodayCount = todayTasks.where((t) => t.isCompleted).length;
-          final totalTodayCount = todayTasks.length;
-          final progress = totalTodayCount > 0 ? completedTodayCount / totalTodayCount : 0.0;
-
-          final Map<String, List<Task>> upcomingGroups = {};
-          for (final task in upcomingTasks) {
-            final label = _getWeekdayName(task.dueDate!);
-            upcomingGroups.putIfAbsent(label, () => []).add(task);
-          }
+          final totalTasksCount = tasks.length;
+          final completedTasksCount = completedTasks.length;
+          final progress =
+              totalTasksCount > 0 ? completedTasksCount / totalTasksCount : 0.0;
 
           return CustomScrollView(
-            slivers: [
-              // ── Sticky Sliver Header ─────────────────────────────────────
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: _HomeHeaderDelegate(
-                  greeting: _getGreeting(),
-                  userName: userName,
-                  date: _getFormattedDate(),
-                  isDark: isDark,
-                  onSearch: () {
-                    HapticFeedback.lightImpact();
-                    context.push(AppRoutes.search);
-                  },
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                // ─── Premium App Bar ───────────────────────────────────────
+                SliverAppBar(
+                  floating: true,
+                  snap: true,
+                  backgroundColor: theme.scaffoldBackgroundColor,
+                  elevation: 0,
+                  scrolledUnderElevation: 0,
+                  centerTitle: true,
+                  title: Text(
+                    'TaskFlow',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: theme.textTheme.bodyLarge?.color,
+                      fontSize: 24.sp,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  actions: [
+                    IconButton(
+                      icon: Icon(
+                        isDark
+                            ? Icons.light_mode_rounded
+                            : Icons.dark_mode_rounded,
+                      ),
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        ref.read(themeModeProvider.notifier).toggleTheme();
+                      },
+                    ),
+                    SizedBox(width: AppSpacing.sm),
+                  ],
                 ),
-              ),
 
-              SliverToBoxAdapter(child: SizedBox(height: AppSpacing.h_xs)),
-
-              // ── Progress Card ─────────────────────────────────────────────
-              SliverToBoxAdapter(
-                child: _ProgressCard(
-                  progress: progress,
-                  completedCount: completedTodayCount,
-                  totalCount: totalTodayCount,
-                  isDark: isDark,
-                ).animate().fadeIn(duration: 350.ms).slideY(
-                  begin: 0.06,
-                  end: 0,
-                  curve: Curves.easeOutCubic,
-                  duration: 350.ms,
-                ),
-              ),
-
-              SliverToBoxAdapter(child: SizedBox(height: AppSpacing.h_md)),
-
-              // ── Today Section Header ──────────────────────────────────────
-              SliverToBoxAdapter(
-                child: _SectionHeader(
-                  label: "TODAY'S TASKS",
-                  count: todayTasks.length,
-                ).animate().fadeIn(duration: 300.ms, delay: 80.ms),
-              ),
-
-              SliverToBoxAdapter(child: SizedBox(height: AppSpacing.h_xs)),
-
-              // ── Today Tasks ───────────────────────────────────────────────
-              if (todayTasks.isEmpty)
-                const SliverToBoxAdapter(child: EmptyState())
-              else
-                SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final task = todayTasks[index];
-                      return TaskCard(
-                        task: task,
-                        onToggle: () async {
-                          final wasCompleted = task.isCompleted;
-                          await ref
-                              .read(tasksControllerProvider.notifier)
-                              .toggleCompletion(task);
-                          if (!wasCompleted && context.mounted) {
-                            await ConfettiService.notifyTaskCompleted(context);
-                          }
-                        },
-                        onDelete: () {
-                          ref
-                              .read(tasksControllerProvider.notifier)
-                              .deleteTask(task.id);
-                        },
-                        onTap: () {
-                          showModalBottomSheet(
-                            context: context,
-                            isScrollControlled: true,
-                            builder: (context) => FractionallySizedBox(
-                              heightFactor: 0.85,
-                              child: TaskDetailScreen(task: task),
-                            ),
-                          );
-                        },
-                      ).animate().fadeIn(
-                            duration: 300.ms,
-                            delay: Duration(milliseconds: 40 * index),
-                          );
-                    },
-                    childCount: todayTasks.length,
+                // ─── Hero Greeting ─────────────────────────────────────────
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm,
+                        AppSpacing.md, AppSpacing.xs),
+                    child: _HeroGreetingCard(
+                      userName: userName,
+                      activeTasks: activeTasks,
+                      completedTasks: completedTasks,
+                      greeting: _getGreeting(),
+                      isDark: isDark,
+                      theme: theme,
+                    ),
                   ),
                 ),
 
-              // ── Upcoming Section ──────────────────────────────────────────
-              if (upcomingTasks.isNotEmpty) ...[
-                SliverToBoxAdapter(child: SizedBox(height: AppSpacing.h_md)),
-                SliverToBoxAdapter(
-                  child: _SectionHeader(
-                    label: 'UPCOMING',
-                    count: upcomingTasks.length,
-                  ).animate().fadeIn(duration: 300.ms, delay: 120.ms),
-                ),
-                SliverToBoxAdapter(child: SizedBox(height: AppSpacing.h_xs)),
-                // Accordion toggle row
+                // ─── Progress Card ─────────────────────────────────────────
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                    child: GestureDetector(
-                      onTap: _toggleUpcoming,
-                      behavior: HitTestBehavior.opaque,
-                      child: Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: AppSpacing.md,
-                          vertical: AppSpacing.sm,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? AppColors.darkSurface
-                              : AppColors.lightSurface,
-                          borderRadius: AppRadius.borderXL,
-                          border: Border.all(
-                            color: isDark
-                                ? AppColors.darkBorder
-                                : AppColors.lightBorder,
-                            width: 0.5,
-                          ),
-                        ),
-                        child: Row(
+                    padding: EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md,
+                        AppSpacing.md, AppSpacing.lg),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Container(
-                              width: 30,
-                              height: 30,
-                              decoration: BoxDecoration(
-                                color: AppColors.primary.withOpacity(0.10),
-                                borderRadius: AppRadius.borderMD,
-                              ),
-                              child: const Icon(
-                                Icons.calendar_month_outlined,
-                                color: AppColors.primary,
-                                size: 16,
+                            Text(
+                              'Task Progress',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                color: theme.textTheme.bodySmall?.color
+                                    ?.withValues(alpha: 0.8),
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
-                            SizedBox(width: AppSpacing.sm),
-                            Expanded(
-                              child: Text(
-                                '${upcomingTasks.length} upcoming task${upcomingTasks.length == 1 ? '' : 's'}',
-                                style: TextStyle(
-                                  fontSize: 13.5.sp,
-                                  fontWeight: FontWeight.w600,
-                                  color: isDark
-                                      ? AppColors.darkTextPrimary
-                                      : AppColors.lightTextPrimary,
-                                ),
-                              ),
-                            ),
-                            RotationTransition(
-                              turns: _chevronRotation,
-                              child: Icon(
-                                Icons.keyboard_arrow_down_rounded,
-                                size: 20,
-                                color: isDark
-                                    ? AppColors.darkTextSecondary
-                                    : AppColors.lightTextSecondary,
+                            Text(
+                              '${(progress * 100).toInt()}%',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ],
+                        ),
+                        const SizedBox(height: 12),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: progress,
+                            minHeight: 8,
+                            backgroundColor: isDark
+                                ? AppColors.darkBorder
+                                : AppColors.lightBorder,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              isDark ? Colors.white : Colors.black,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // ─── Tasks Header ──────────────────────────────────────────
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+                    child: Text(
+                      "Tasks",
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 20.sp,
+                      ),
+                    ),
+                  ).animate().fadeIn(duration: 300.ms, delay: 200.ms),
+                ),
+
+                // ─── Active Task Items ─────────────────────────────────────
+                if (activeTasks.isEmpty && completedTasks.isEmpty)
+                  const SliverToBoxAdapter(child: EmptyState())
+                else
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final task = activeTasks[index];
+                        return TaskCard(
+                          task: task,
+                          onToggle: () async {
+                            final wasCompleted = task.isCompleted;
+                            await ref
+                                .read(tasksControllerProvider.notifier)
+                                .toggleCompletion(task);
+                            if (!wasCompleted && context.mounted) {
+                              await ConfettiService.notifyTaskCompleted(
+                                  context);
+                            }
+                          },
+                          onDelete: () {
+                            ref
+                                .read(tasksControllerProvider.notifier)
+                                .deleteTask(task.id);
+                          },
+                          onTap: () => _openTask(context, task: task),
+                        );
+                      },
+                      childCount: activeTasks.length,
+                    ),
+                  ),
+
+                // ─── Completed Section ─────────────────────────────────────
+                if (completedTasks.isNotEmpty) ...[
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.lg,
+                          AppSpacing.md, AppSpacing.sm),
+                      child: Text(
+                        'COMPLETED',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: theme.textTheme.bodySmall?.color
+                              ?.withValues(alpha: 0.4),
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2,
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
-
-              // ── Upcoming Expanded Groups ───────────────────────────────────
-              if (_isUpcomingExpanded && upcomingTasks.isNotEmpty)
-                SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final label = upcomingGroups.keys.elementAt(index);
-                      final groupTasks = upcomingGroups[label] ?? [];
-
-                      return Padding(
-                        padding: EdgeInsets.only(top: AppSpacing.h_xs),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding: EdgeInsets.only(
-                                left: AppSpacing.md + 4,
-                                bottom: 4,
-                              ),
-                              child: Text(
-                                label.toUpperCase(),
-                                style: TextStyle(
-                                  fontSize: 10.5.sp,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.9,
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                            ),
-                            ...groupTasks.map((task) => TaskCard(
-                                  task: task,
-                                  onToggle: () async {
-                                    final wasCompleted = task.isCompleted;
-                                    await ref
-                                        .read(tasksControllerProvider.notifier)
-                                        .toggleCompletion(task);
-                                    if (!wasCompleted && context.mounted) {
-                                      await ConfettiService.notifyTaskCompleted(
-                                          context);
-                                    }
-                                  },
-                                  onDelete: () {
-                                    ref
-                                        .read(tasksControllerProvider.notifier)
-                                        .deleteTask(task.id);
-                                  },
-                                  onTap: () {
-                                    showModalBottomSheet(
-                                      context: context,
-                                      isScrollControlled: true,
-                                      builder: (context) => FractionallySizedBox(
-                                        heightFactor: 0.85,
-                                        child: TaskDetailScreen(task: task),
-                                      ),
-                                    );
-                                  },
-                                )),
-                          ],
-                        ),
-                      ).animate().fadeIn(duration: 250.ms).slideY(
-                            begin: 0.05,
-                            end: 0,
-                            duration: 250.ms,
-                            curve: Curves.easeOutCubic,
-                          );
-                    },
-                    childCount: upcomingGroups.keys.length,
-                  ),
-                ),
-
-              // ── Bottom spacer for FAB clearance ──────────────────────────
-              SliverToBoxAdapter(child: SizedBox(height: 120.h)),
-            ],
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text('Error: $err')),
-      ),
-
-      // ── Premium Pill FAB ─────────────────────────────────────────────────
-      floatingActionButton: _PremiumFab(
-        onPressed: () {
-          HapticFeedback.mediumImpact();
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            builder: (context) => const FractionallySizedBox(
-              heightFactor: 0.85,
-              child: TaskDetailScreen(),
-            ),
-          );
-        },
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-    );
-  }
-}
-
-// ─── Sliver Header Delegate ──────────────────────────────────────────────────
-
-class _HomeHeaderDelegate extends SliverPersistentHeaderDelegate {
-  final String greeting;
-  final String userName;
-  final String date;
-  final bool isDark;
-  final VoidCallback onSearch;
-
-  const _HomeHeaderDelegate({
-    required this.greeting,
-    required this.userName,
-    required this.date,
-    required this.isDark,
-    required this.onSearch,
-  });
-
-  @override
-  double get minExtent => 64;
-  @override
-  double get maxExtent => 112;
-
-  @override
-  Widget build(
-      BuildContext context, double shrinkOffset, bool overlapsContent) {
-    final t = (shrinkOffset / maxExtent).clamp(0.0, 1.0);
-    final isCollapsed = t > 0.5;
-    final theme = Theme.of(context);
-
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(
-          sigmaX: overlapsContent ? 16 : 0,
-          sigmaY: overlapsContent ? 16 : 0,
-        ),
-        child: Container(
-          color: theme.scaffoldBackgroundColor.withOpacity(
-            overlapsContent ? 0.88 : 1.0,
-          ),
-          padding: EdgeInsets.only(
-            top: MediaQuery.of(context).padding.top + 6,
-            bottom: 10,
-          ),
-          child: AnimatedCrossFade(
-            duration: const Duration(milliseconds: 200),
-            firstChild: _buildExpanded(context),
-            secondChild: _buildCollapsed(context),
-            crossFadeState: isCollapsed
-                ? CrossFadeState.showSecond
-                : CrossFadeState.showFirst,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildExpanded(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '$greeting, $userName 👋',
-                  style: TextStyle(
-                    fontSize: 20.sp,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.4,
-                    color: isDark
-                        ? AppColors.darkTextPrimary
-                        : AppColors.lightTextPrimary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  date,
-                  style: TextStyle(
-                    fontSize: 12.sp,
-                    fontWeight: FontWeight.w400,
-                    color: isDark
-                        ? AppColors.darkTextSecondary
-                        : AppColors.lightTextSecondary,
-                    letterSpacing: 0.1,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          _ActionButton(
-            icon: Icons.search_rounded,
-            onTap: onSearch,
-            isDark: isDark,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCollapsed(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            'TaskFlow',
-            style: TextStyle(
-              fontSize: 17.sp,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.3,
-              color: AppColors.primary,
-            ),
-          ),
-          _ActionButton(icon: Icons.search_rounded, onTap: onSearch, isDark: isDark),
-        ],
-      ),
-    );
-  }
-
-  @override
-  bool shouldRebuild(covariant _HomeHeaderDelegate oldDelegate) =>
-      greeting != oldDelegate.greeting ||
-      userName != oldDelegate.userName ||
-      isDark != oldDelegate.isDark;
-}
-
-class _ActionButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  final bool isDark;
-
-  const _ActionButton({
-    required this.icon,
-    required this.onTap,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: isDark
-              ? Colors.white.withOpacity(0.07)
-              : Colors.black.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Icon(
-          icon,
-          size: 18,
-          color: isDark
-              ? AppColors.darkTextPrimary
-              : AppColors.lightTextPrimary,
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Progress Card ───────────────────────────────────────────────────────────
-
-class _ProgressCard extends StatelessWidget {
-  final double progress;
-  final int completedCount;
-  final int totalCount;
-  final bool isDark;
-
-  const _ProgressCard({
-    required this.progress,
-    required this.completedCount,
-    required this.totalCount,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
-      child: Container(
-        padding: EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isDark
-                ? [
-                    const Color(0xFF1E1B4B),
-                    const Color(0xFF1E1B3A),
-                  ]
-                : [
-                    const Color(0xFFEEF2FF),
-                    const Color(0xFFF5F3FF),
-                  ],
-          ),
-          borderRadius: AppRadius.borderXL,
-          border: Border.all(
-            color: AppColors.primary.withOpacity(isDark ? 0.18 : 0.12),
-            width: 1,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  "Today's progress",
-                  style: TextStyle(
-                    fontSize: 12.sp,
-                    fontWeight: FontWeight.w600,
-                    color: isDark
-                        ? AppColors.darkTextSecondary
-                        : AppColors.primary.withOpacity(0.75),
-                    letterSpacing: 0.2,
-                  ),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '$completedCount / $totalCount',
-                    style: TextStyle(
-                      fontSize: 11.sp,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: AppSpacing.h_sm),
-            ProgressBar(value: progress),
-            if (totalCount > 0 && completedCount == totalCount) ...[
-              SizedBox(height: AppSpacing.h_xs),
-              Row(
-                children: [
-                  const Icon(
-                    Icons.auto_awesome_rounded,
-                    color: AppColors.primary,
-                    size: 14,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'All done! Great work today.',
-                    style: TextStyle(
-                      fontSize: 11.sp,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.primary,
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final task = completedTasks[index];
+                        return TaskCard(
+                          task: task,
+                          onToggle: () async {
+                            await ref
+                                .read(tasksControllerProvider.notifier)
+                                .toggleCompletion(task);
+                          },
+                          onDelete: () {
+                            ref
+                                .read(tasksControllerProvider.notifier)
+                                .deleteTask(task.id);
+                          },
+                          onTap: () => _openTask(context, task: task),
+                        );
+                      },
+                      childCount: completedTasks.length,
                     ),
                   ),
                 ],
-              ),
-            ],
-          ],
+              ]);
+        },
+        loading: () => Center(
+          child: CircularProgressIndicator(
+            color: AppColors.primary,
+            strokeWidth: 2.5,
+          ),
         ),
+        error: (err, stack) => Center(child: Text('Error: $err')),
+      ),
+      floatingActionButton: _AddTaskFAB(
+        onPressed: () => _openTask(context),
       ),
     );
   }
 }
 
-// ─── Section Header ──────────────────────────────────────────────────────────
+// ─── Hero Greeting Card ──────────────────────────────────────────────────────
 
-class _SectionHeader extends StatelessWidget {
-  final String label;
-  final int count;
+class _HeroGreetingCard extends StatelessWidget {
+  const _HeroGreetingCard({
+    required this.userName,
+    required this.activeTasks,
+    required this.completedTasks,
+    required this.greeting,
+    required this.isDark,
+    required this.theme,
+  });
 
-  const _SectionHeader({required this.label, required this.count});
+  final String userName;
+  final List<Task> activeTasks;
+  final List<Task> completedTasks;
+  final String greeting;
+  final bool isDark;
+  final ThemeData theme;
+
+  String get _subline {
+    final total = activeTasks.length;
+    final done = completedTasks.length;
+    if (total == 0 && done == 0) {
+      return 'Your schedule is clear, a great time to plan ahead.';
+    }
+    if (done == 0) return 'Let\'s make progress, one task at a time.';
+    if (total == 0) return 'All done! Enjoy the rest of your day.';
+    return '$done task${done == 1 ? '' : 's'} completed. Keep the momentum going!';
+  }
+
+  IconData get _greetingIcon {
+    final g = greeting.toLowerCase();
+    if (g.contains('morning')) return Icons.wb_sunny_rounded;
+    if (g.contains('afternoon')) return Icons.wb_cloudy_rounded;
+    if (g.contains('evening')) return Icons.nights_stay_rounded;
+    return Icons.bedtime_rounded;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accentColor = AppColors.primary;
 
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: AppSpacing.md + 2),
-      child: Row(
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+        borderRadius: BorderRadius.circular(20.r),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+          width: 1.0.w,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: accentColor.withValues(alpha: isDark ? 0.15 : 0.09),
+            blurRadius: 28,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.md,
+              AppSpacing.lg,
+              AppSpacing.md,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Date + greeting pill row
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      DateFormat('EEEE, MMMM d')
+                          .format(DateTime.now())
+                          .toUpperCase(),
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: theme.textTheme.bodySmall?.color
+                            ?.withValues(alpha: 0.5),
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.4,
+                        fontSize: 10.sp,
+                      ),
+                    ),
+                    const Spacer(),
+
+                    // Greeting icon pill
+                    Container(
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 12.w, vertical: 5.h),
+                      decoration: BoxDecoration(
+                        color:
+                            accentColor.withValues(alpha: isDark ? 0.12 : 0.08),
+                        borderRadius: BorderRadius.circular(30.r),
+                        border: Border.all(
+                          color: accentColor.withValues(alpha: 0.2),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _greetingIcon,
+                            size: 14.sp,
+                            color: accentColor,
+                          ),
+                          SizedBox(width: 5.w),
+                          Text(
+                            greeting,
+                            style: TextStyle(
+                              fontSize: 12.sp,
+                              fontWeight: FontWeight.w600,
+                              color: accentColor,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                        .animate()
+                        .fadeIn(delay: 100.ms, duration: 400.ms)
+                        .scaleXY(begin: 0.92, end: 1.0),
+                  ],
+                ),
+
+                SizedBox(height: 16.h),
+
+                Text(
+                  'Hello, $userName',
+                  style: GoogleFonts.poppins(
+                    fontSize: 26.sp,
+                    fontWeight: FontWeight.w400,
+                  ),
+                )
+                    .animate()
+                    .fadeIn(delay: 150.ms, duration: 450.ms)
+                    .slideY(begin: 0.05, end: 0),
+
+                SizedBox(height: 8.h),
+
+                // Sub-line
+                Text(
+                  _subline,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.textTheme.bodySmall?.color
+                        ?.withValues(alpha: 0.65),
+                    fontSize: 13.5.sp,
+                    height: 1.45,
+                  ),
+                ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
+
+                SizedBox(height: 20.h),
+
+                // Stats row
+                _StatsRow(
+                  activeTasks: activeTasks,
+                  completedTasks: completedTasks,
+                  accentColor: accentColor,
+                  theme: theme,
+                  isDark: isDark,
+                )
+                    .animate()
+                    .fadeIn(delay: 270.ms, duration: 400.ms)
+                    .slideY(begin: 0.08, end: 0),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn(duration: 500.ms).slideY(begin: 0.04, end: 0);
+  }
+}
+
+// ─── Stats Row ───────────────────────────────────────────────────────────────
+
+class _StatsRow extends StatelessWidget {
+  const _StatsRow({
+    required this.activeTasks,
+    required this.completedTasks,
+    required this.accentColor,
+    required this.theme,
+    required this.isDark,
+  });
+
+  final List<Task> activeTasks;
+  final List<Task> completedTasks;
+  final Color accentColor;
+  final ThemeData theme;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = activeTasks.length + completedTasks.length;
+
+    return Row(
+      children: [
+        _StatChip(
+          label: 'Active',
+          value: '${activeTasks.length}',
+          color: accentColor,
+          isDark: isDark,
+          theme: theme,
+        ),
+        SizedBox(width: 8.w),
+        _StatChip(
+          label: 'Completed',
+          value: '${completedTasks.length}',
+          color: Colors.green,
+          isDark: isDark,
+          theme: theme,
+        ),
+        SizedBox(width: 8.w),
+        _StatChip(
+          label: 'Total',
+          value: '$total',
+          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+          isDark: isDark,
+          theme: theme,
+          subtle: true,
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Stat Chip ───────────────────────────────────────────────────────────────
+
+class _StatChip extends StatelessWidget {
+  const _StatChip({
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.isDark,
+    required this.theme,
+    this.subtle = false,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+  final bool isDark;
+  final ThemeData theme;
+  final bool subtle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 13.w, vertical: 7.5.h),
+      decoration: BoxDecoration(
+        color: subtle
+            ? (isDark ? AppColors.darkSurface : AppColors.lightSurface)
+            : color.withValues(alpha: isDark ? 0.12 : 0.09),
+        borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(
+          color: subtle
+              ? (isDark ? AppColors.darkBorder : AppColors.lightBorder)
+              : color.withValues(alpha: isDark ? 0.25 : 0.2),
+          width: 1.w,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 16.sp,
+              fontWeight: FontWeight.w700,
+              color: subtle
+                  ? theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.75)
+                  : color,
+              height: 1,
+            ),
+          ),
+          SizedBox(height: 1.h),
           Text(
             label,
             style: TextStyle(
-              fontSize: 10.5.sp,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.9,
-              color: isDark
-                  ? AppColors.darkTextSecondary
-                  : AppColors.lightTextSecondary,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.10),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              '$count',
-              style: TextStyle(
-                fontSize: 10.sp,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primary,
-              ),
+              fontSize: 10.sp,
+              fontWeight: FontWeight.w500,
+              color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.55),
+              letterSpacing: 0.4,
             ),
           ),
         ],
@@ -725,15 +629,16 @@ class _SectionHeader extends StatelessWidget {
 
 // ─── Premium FAB ─────────────────────────────────────────────────────────────
 
-class _PremiumFab extends StatefulWidget {
+class _AddTaskFAB extends StatefulWidget {
   final VoidCallback onPressed;
-  const _PremiumFab({required this.onPressed});
+
+  const _AddTaskFAB({required this.onPressed});
 
   @override
-  State<_PremiumFab> createState() => _PremiumFabState();
+  State<_AddTaskFAB> createState() => _AddTaskFABState();
 }
 
-class _PremiumFabState extends State<_PremiumFab>
+class _AddTaskFABState extends State<_AddTaskFAB>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnim;
@@ -743,14 +648,12 @@ class _PremiumFabState extends State<_PremiumFab>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 130),
-      lowerBound: 0.0,
+      lowerBound: 0.92,
       upperBound: 1.0,
       value: 1.0,
+      duration: const Duration(milliseconds: 120),
     );
-    _scaleAnim = Tween<double>(begin: 0.94, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
+    _scaleAnim = _controller;
   }
 
   @override
@@ -761,52 +664,42 @@ class _PremiumFabState extends State<_PremiumFab>
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => _controller.reverse(),
-      onTapUp: (_) {
-        _controller.forward();
-        widget.onPressed();
-      },
-      onTapCancel: () => _controller.forward(),
-      child: ScaleTransition(
-        scale: _scaleAnim,
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return ScaleTransition(
+      scale: _scaleAnim,
+      child: GestureDetector(
+        onTapDown: (_) => _controller.reverse(),
+        onTapUp: (_) {
+          _controller.forward();
+          widget.onPressed();
+        },
+        onTapCancel: () => _controller.forward(),
         child: Container(
-          height: 50.h,
-          padding: EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+          height: 60,
+          width: 60,
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [AppColors.primaryDark, AppColors.primary],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: AppRadius.borderCircular,
+            color: isDark ? Colors.white : Colors.black,
+            shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withOpacity(0.35),
-                blurRadius: 20,
-                spreadRadius: -2,
-                offset: const Offset(0, 6),
+                color: (isDark ? Colors.white : Colors.black).withOpacity(0.2),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.add_rounded, color: Colors.white, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'New Task',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 14.sp,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.2,
-                ),
-              ),
-            ],
+          child: Icon(
+            Icons.add_rounded,
+            color: isDark ? Colors.black : Colors.white,
+            size: 32,
           ),
         ),
       ),
-    );
+    )
+        .animate()
+        .fadeIn(duration: 400.ms, delay: 300.ms)
+        .slideY(begin: 0.3, end: 0);
   }
 }

@@ -11,7 +11,7 @@ class TaskFlowApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
-    final themeMode = ref.watch(themeModeProvider);
+    final isDarkMode = ref.watch(themeModeProvider);
 
     return ScreenUtilInit(
       designSize: const Size(411, 914),
@@ -23,7 +23,7 @@ class TaskFlowApp extends ConsumerWidget {
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
-          themeMode: themeMode,
+          themeMode: isDarkMode ? ThemeMode.dark : ThemeMode.light,
           routerConfig: router,
         );
       },

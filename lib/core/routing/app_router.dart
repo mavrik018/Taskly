@@ -36,11 +36,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.onboarding,
         builder: (context, state) => const OnboardingScreen(),
       ),
-      // Search Screen (No bottom nav)
-      GoRoute(
-        path: AppRoutes.search,
-        builder: (context, state) => const SearchScreen(),
-      ),
       // App Navigation Shell
       ShellRoute(
         builder: (context, state, child) {
@@ -50,6 +45,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.home,
             builder: (context, state) => const HomeScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.search,
+            builder: (context, state) => const SearchScreen(),
           ),
           GoRoute(
             path: '/projects',

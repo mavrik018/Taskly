@@ -29,6 +29,15 @@ class OnboardingController extends AsyncNotifier<OnboardingState> {
       return OnboardingState(isCompleted: true, userName: name);
     });
   }
+
+  Future<void> updateUserName(String name) async {
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_nameKey, name);
+      return OnboardingState(isCompleted: true, userName: name);
+    });
+  }
 }
 
 final onboardingProvider =

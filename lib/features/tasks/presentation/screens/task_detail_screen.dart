@@ -1,24 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:taskflow/core/utils/notification_manager.dart';
 import '../../domain/entities/task.dart';
 import '../controllers/tasks_provider.dart';
 import '../../../projects/presentation/controllers/projects_provider.dart';
-import '../../../projects/domain/entities/project.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
-import '../../../../core/theme/app_radius.dart';
 import '../../../../core/utils/date_formatter.dart';
 import '../../../../core/utils/debounce.dart';
-import '../../../../core/utils/rich_text_parser.dart';
 import '../../../../core/utils/semantics_service.dart';
 
 class TaskDetailScreen extends ConsumerStatefulWidget {
-  final Task? task; // null if creating a new task
-  final int?
-      initialProjectId; // pre-assign project when creating from project sheet
+  final Task? task;
+  final int? initialProjectId;
 
   const TaskDetailScreen({
     super.key,
@@ -30,39 +27,42 @@ class TaskDetailScreen extends ConsumerStatefulWidget {
   ConsumerState<TaskDetailScreen> createState() => _TaskDetailScreenState();
 }
 
-class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen> {
-  late RichTextEditingController _titleController;
+class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen>
+    with SingleTickerProviderStateMixin {
+  late TextEditingController _titleController;
   late TextEditingController _descriptionController;
   late int _priority;
   DateTime? _dueDate;
   int? _projectId;
 
-  int? _editingTaskId; // Tracks the ID of the task being edited
+  int? _editingTaskId;
   late Debounce _debounce;
+  late AnimationController _sheetController;
 
   @override
   void initState() {
     super.initState();
     _editingTaskId = widget.task?.id;
-    _priority = widget.task?.priority ?? 4; // Default to Neutral (4)
+    _priority = widget.task?.priority ?? 4;
     _dueDate = widget.task?.dueDate;
     _projectId = widget.task?.projectId ?? widget.initialProjectId;
 
     _debounce = Debounce(delay: const Duration(milliseconds: 600));
 
-    // Custom controller for styling markdown inline
-    _titleController = RichTextEditingController(
+    _titleController = TextEditingController(
       text: widget.task?.title ?? '',
-      baseStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
     );
-
     _descriptionController = TextEditingController(
       text: widget.task?.description ?? '',
     );
 
-    // Set up listeners for auto-save
     _titleController.addListener(_saveTaskDebounced);
     _descriptionController.addListener(_saveTaskDebounced);
+
+    _sheetController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    )..forward();
   }
 
   @override
@@ -72,17 +72,14 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen> {
     _titleController.dispose();
     _descriptionController.dispose();
     _debounce.dispose();
+    _sheetController.dispose();
     super.dispose();
   }
 
-  // Debounced auto-save
   void _saveTaskDebounced() {
-    _debounce.run(() {
-      _saveTask(isDismissing: false);
-    });
+    _debounce.run(() => _saveTask(isDismissing: false));
   }
 
-  // Actual save method
   Future<void> _saveTask({required bool isDismissing}) async {
     final title = _titleController.text.trim();
     if (title.isEmpty) return;
@@ -91,7 +88,6 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen> {
     final controller = ref.read(tasksControllerProvider.notifier);
 
     if (_editingTaskId == null) {
-      // First save (Create Task)
       final newId = await controller.addTask(
         title: title,
         description: description.isEmpty ? null : description,
@@ -100,13 +96,10 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen> {
         projectId: _projectId,
       );
       if (newId != null) {
-        setState(() {
-          _editingTaskId = newId;
-        });
+        setState(() => _editingTaskId = newId);
         AppSemanticsService.announce('Task created');
       }
     } else {
-      // Subsequent save (Update Task)
       await controller.updateTaskDetails(
         Task(
           id: _editingTaskId!,
@@ -118,90 +111,53 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen> {
           isCompleted: widget.task?.isCompleted ?? false,
         ),
       );
-      if (isDismissing) {
-        AppSemanticsService.announce('Task details updated');
-      }
+      if (isDismissing) AppSemanticsService.announce('Task updated');
     }
-  }
-
-  void _toggleFormat(String symbol) {
-    HapticFeedback.lightImpact();
-    final text = _titleController.text;
-    final selection = _titleController.selection;
-    final start = selection.start;
-    final end = selection.end;
-
-    if (start < 0 || end < 0) {
-      final cursor = start >= 0 ? start : text.length;
-      final newText =
-          '${text.substring(0, cursor)}$symbol$symbol${text.substring(cursor)}';
-      _titleController.value = TextEditingValue(
-        text: newText,
-        selection: TextSelection.collapsed(offset: cursor + symbol.length),
-      );
-    } else {
-      // Text selected, wrap the text in formatting tags
-      final selectedText = text.substring(start, end);
-      final newText =
-          '${text.substring(0, start)}$symbol$selectedText$symbol${text.substring(end)}';
-      _titleController.value = TextEditingValue(
-        text: newText,
-        selection: TextSelection(
-          baseOffset: start,
-          extentOffset: end + symbol.length * 2,
-        ),
-      );
-    }
-    _saveTaskDebounced();
-  }
-
-  void _clearFormatting() {
-    HapticFeedback.lightImpact();
-    final text = _titleController.text;
-    final cleanText = text
-        .replaceAll('**', '')
-        .replaceAll('*', '')
-        .replaceAll('_', '')
-        .replaceAll('~', '');
-    _titleController.value = TextEditingValue(
-      text: cleanText,
-      selection: TextSelection.collapsed(offset: cleanText.length),
-    );
-    _saveTaskDebounced();
   }
 
   Future<void> _selectDueDate(BuildContext context) async {
     HapticFeedback.lightImpact();
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    
+
     DateTime initialDate = _dueDate ?? now;
-    if (initialDate.isBefore(today)) {
-      initialDate = today;
-    }
+    if (initialDate.isBefore(today)) initialDate = today;
 
     final pickedDate = await showDatePicker(
       context: context,
       initialDate: initialDate,
       firstDate: today,
       lastDate: today.add(const Duration(days: 365 * 5)),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: Theme.of(context).colorScheme.copyWith(
+                primary: AppColors.primary,
+              ),
+        ),
+        child: child!,
+      ),
     );
 
     if (pickedDate != null) {
       if (!context.mounted) return;
-
-      // Request notifications permission since a due date is being set
       await NotificationManager.requestPermissions(context);
-
       if (!context.mounted) return;
-      
-      final initialTime = _dueDate != null 
-          ? TimeOfDay.fromDateTime(_dueDate!) 
+
+      final initialTime = _dueDate != null
+          ? TimeOfDay.fromDateTime(_dueDate!)
           : TimeOfDay.fromDateTime(now);
 
       final pickedTime = await showTimePicker(
         context: context,
         initialTime: initialTime,
+        builder: (context, child) => Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+                  primary: AppColors.primary,
+                ),
+          ),
+          child: child!,
+        ),
       );
 
       DateTime finalDateTime;
@@ -214,464 +170,654 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen> {
           pickedTime.minute,
         );
       } else {
-        // Default to a future time if no time is picked
-        final compareDate = DateTime(pickedDate.year, pickedDate.month, pickedDate.day);
+        final compareDate =
+            DateTime(pickedDate.year, pickedDate.month, pickedDate.day);
         if (compareDate.isAtSameMomentAs(today)) {
-          // If today, set to 1 hour from now
           finalDateTime = now.add(const Duration(hours: 1));
         } else {
-          // If future, default to 9:00 AM
-          finalDateTime = DateTime(
-            pickedDate.year,
-            pickedDate.month,
-            pickedDate.day,
-            9,
-            0,
-          );
+          finalDateTime =
+              DateTime(pickedDate.year, pickedDate.month, pickedDate.day, 9, 0);
         }
       }
 
-      setState(() {
-        _dueDate = finalDateTime;
-      });
-      _saveTask(isDismissing: false);
-    }
-  }
-
-  void _setQuickDate(DateTime? date) async {
-    HapticFeedback.lightImpact();
-    if (date != null) {
-      if (context.mounted) {
-        await NotificationManager.requestPermissions(context);
-      }
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final compareDate = DateTime(date.year, date.month, date.day);
-      
-      if (compareDate.isAtSameMomentAs(today)) {
-        // If today, set to 1 hour from now so it is in the future
-        date = now.add(const Duration(hours: 1));
-      } else if (compareDate.difference(today).inDays == 1) {
-        // If tomorrow, default to tomorrow at 9:00 AM
-        date = DateTime(date.year, date.month, date.day, 9, 0);
-      }
-    }
-    setState(() {
-      _dueDate = date;
-    });
-    _saveTask(isDismissing: false);
-  }
-
-  Future<void> _selectProject(
-      BuildContext context, List<Project> projects) async {
-    HapticFeedback.lightImpact();
-    final selected = await showModalBottomSheet<Project?>(
-      context: context,
-      shape: RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
-      ),
-      builder: (context) {
-        final theme = Theme.of(context);
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: EdgeInsets.all(AppSpacing.md),
-                child: Text(
-                  'Select Project',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              const Divider(),
-              if (projects.isEmpty)
-                Padding(
-                  padding: EdgeInsets.all(AppSpacing.lg),
-                  child: Text(
-                    'No projects available. Go to Projects tab to create one.',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                ),
-              ...projects.map((proj) {
-                Color projColor;
-                try {
-                  projColor = Color(int.parse('FF${proj.colorHex}', radix: 16));
-                } catch (_) {
-                  projColor = AppColors.primary;
-                }
-                return ListTile(
-                  leading: Container(
-                    width: 16,
-                    height: 16,
-                    decoration: BoxDecoration(
-                      color: projColor,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  title: Text(proj.name),
-                  onTap: () => Navigator.pop(context, proj),
-                );
-              }),
-              SizedBox(height: AppSpacing.md),
-            ],
-          ),
-        );
-      },
-    );
-
-    if (selected != null) {
-      setState(() {
-        _projectId = selected.id;
-      });
+      setState(() => _dueDate = finalDateTime);
       _saveTask(isDismissing: false);
     }
   }
 
   void _updatePriority(int level) {
     HapticFeedback.lightImpact();
-    setState(() {
-      _priority = level;
-    });
+    setState(() => _priority = level);
     _saveTask(isDismissing: false);
-  }
-
-  Widget _buildPriorityButton(int level, ThemeData theme) {
-    final String label;
-    final Color color;
-    switch (level) {
-      case 1:
-        label = 'High 🔴';
-        color = AppColors.priorityHigh;
-        break;
-      case 2:
-        label = 'Medium 🟡';
-        color = AppColors.priorityMedium;
-        break;
-      case 3:
-        label = 'Low 🟢';
-        color = AppColors.priorityLow;
-        break;
-      case 4:
-      default:
-        label = 'Neutral';
-        color = Colors.grey;
-    }
-
-    final isSelected = _priority == level;
-
-    return Expanded(
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: AppSpacing.xxs),
-        child: OutlinedButton(
-          style: OutlinedButton.styleFrom(
-            backgroundColor: isSelected ? color.withOpacity(0.15) : null,
-            side: BorderSide(
-              color: isSelected ? color : theme.dividerColor,
-              width: isSelected ? 2 : 1,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: AppRadius.borderMD,
-            ),
-            padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
-          ),
-          onPressed: () => _updatePriority(level),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: isSelected ? color : theme.textTheme.bodyMedium?.color,
-              fontWeight: isSelected ? FontWeight.bold : null,
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final projectsAsync = ref.watch(projectsStreamProvider);
     final projects = projectsAsync.value ?? [];
-    final currentProject =
-        projects.where((p) => p.id == _projectId).firstOrNull;
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return PopScope(
       canPop: true,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) {
-          // Cancel debounce and force immediate save when dismissing
           _debounce.dispose();
           await _saveTask(isDismissing: true);
         }
       },
-      child: Material(
-        color: theme.scaffoldBackgroundColor,
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(AppRadius.xxl),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkBackground : AppColors.lightBackground,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle bar + Title
-            Padding(
-              padding: EdgeInsets.only(
-                top: AppSpacing.md,
-                left: AppSpacing.md,
-                right: AppSpacing.md,
-              ),
-              child: Column(
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: theme.dividerColor,
-                        borderRadius: AppRadius.borderCircular,
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: AppSpacing.sm),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        _editingTaskId == null ? 'Create Task' : 'Edit Task',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      if (_editingTaskId != null)
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline,
-                              color: AppColors.priorityHigh),
-                          onPressed: () {
-                            HapticFeedback.heavyImpact();
-                            ref
-                                .read(tasksControllerProvider.notifier)
-                                .deleteTask(_editingTaskId!);
-                            AppSemanticsService.announce('Task deleted');
-                            context.pop();
-                          },
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const Divider(),
+            // ── Sheet Header ───────────────────────────────────────────
+            _SheetHeader(),
+
+            // ── Scrollable Body ────────────────────────────────────────
             Expanded(
               child: SingleChildScrollView(
-                padding: EdgeInsets.all(AppSpacing.md),
+                physics: const BouncingScrollPhysics(),
+                padding: EdgeInsets.fromLTRB(
+                    AppSpacing.md, 0, AppSpacing.md, AppSpacing.md),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Title Field
-                    TextField(
-                      controller: _titleController,
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                      decoration: const InputDecoration(
-                        hintText: 'What needs to be done?',
-                        border: InputBorder.none,
-                      ),
-                      maxLines: 1,
-                      autofocus: widget.task == null,
-                    ),
-
-                    // Title Formatting Toolbar
-                    Container(
-                      margin: EdgeInsets.only(bottom: AppSpacing.md),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 4, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: theme.cardColor,
-                        borderRadius: AppRadius.borderMD,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                    // ── Title and Subtitle ────────────────────────────────
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          IconButton(
-                            icon: const Icon(Icons.format_bold, size: 20),
-                            tooltip: 'Bold',
-                            onPressed: () => _toggleFormat('**'),
+                          Text(
+                            _editingTaskId != null ? 'Edit Task' : 'New Task',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 28.sp,
+                              color: theme.textTheme.bodyLarge?.color,
+                            ),
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.format_italic, size: 20),
-                            tooltip: 'Italic',
-                            onPressed: () => _toggleFormat('*'),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.format_underlined, size: 20),
-                            tooltip: 'Underline',
-                            onPressed: () => _toggleFormat('_'),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.format_strikethrough,
-                                size: 20),
-                            tooltip: 'Strikethrough',
-                            onPressed: () => _toggleFormat('~'),
-                          ),
-                          const VerticalDivider(width: 8, thickness: 1),
-                          IconButton(
-                            icon: const Icon(Icons.format_clear, size: 20),
-                            tooltip: 'Clear formatting',
-                            onPressed: _clearFormatting,
+                          SizedBox(height: 8),
+                          Text(
+                            'Capture what needs to be done.',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.textTheme.bodySmall?.color
+                                  ?.withOpacity(0.7),
+                              fontSize: 16.sp,
+                            ),
                           ),
                         ],
                       ),
                     ),
 
-                    // Description Field
+                    // ── Title Input ────────────────────────────────────────
+                    SizedBox(height: 16),
+                    TextField(
+                      controller: _titleController,
+                      style: TextStyle(
+                        fontSize: 18.sp,
+                        fontWeight: FontWeight.w600,
+                        color: theme.textTheme.bodyLarge?.color,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Task Title',
+                        hintStyle: TextStyle(
+                          fontSize: 18.sp,
+                          fontWeight: FontWeight.w600,
+                          color: theme.textTheme.bodySmall?.color
+                              ?.withOpacity(0.4),
+                        ),
+                        filled: true,
+                        fillColor: isDark
+                            ? Colors.white.withOpacity(0.05)
+                            : Colors.black.withOpacity(0.04),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 18),
+                      ),
+                      maxLines: null,
+                      keyboardType: TextInputType.multiline,
+                      autofocus: widget.task == null,
+                    ),
+
+                    // ── Description Input ─────────────────────────────────
+                    SizedBox(height: 12),
                     TextField(
                       controller: _descriptionController,
-                      style: theme.textTheme.bodyLarge,
-                      decoration: const InputDecoration(
-                        hintText: 'Add description...',
-                        border: InputBorder.none,
+                      style: TextStyle(
+                        fontSize: 16.sp,
+                        fontWeight: FontWeight.w500,
+                        color:
+                            theme.textTheme.bodyMedium?.color?.withOpacity(0.8),
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Add a description...',
+                        hintStyle: TextStyle(
+                          fontSize: 16.sp,
+                          fontWeight: FontWeight.w500,
+                          color: theme.textTheme.bodySmall?.color
+                              ?.withOpacity(0.4),
+                        ),
+                        filled: true,
+                        fillColor: isDark
+                            ? Colors.white.withOpacity(0.05)
+                            : Colors.black.withOpacity(0.04),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 18),
                       ),
                       maxLines: 4,
+                      minLines: 2,
                     ),
-                    const Divider(),
-                    AppSpacing.heightSM,
 
-                    // Quick Due Date Picker Row
-                    Text('Due Date', style: theme.textTheme.labelLarge),
-                    AppSpacing.heightXS,
+                    // ── Project Section ───────────────────────────────────
+                    SizedBox(height: 24),
+                    Text(
+                      'PROJECT',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color:
+                            theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
+                        letterSpacing: 1.2,
+                        fontSize: 13,
+                      ),
+                    ),
+                    SizedBox(height: 12),
                     Wrap(
-                      spacing: AppSpacing.sm,
-                      runSpacing: AppSpacing.xs,
-                      children: [
-                        ActionChip(
-                          avatar: const Icon(Icons.today_outlined, size: 16),
-                          label: const Text('Today'),
-                          onPressed: () => _setQuickDate(DateTime.now()),
-                        ),
-                        ActionChip(
-                          avatar: const Icon(Icons.wb_sunny_outlined, size: 16),
-                          label: const Text('Tomorrow'),
-                          onPressed: () => _setQuickDate(
-                              DateTime.now().add(const Duration(days: 1))),
-                        ),
-                        ActionChip(
-                          avatar:
-                              const Icon(Icons.date_range_outlined, size: 16),
-                          label: const Text('Custom'),
-                          onPressed: () => _selectDueDate(context),
-                        ),
-                        if (_dueDate != null)
-                          ActionChip(
-                            avatar: const Icon(Icons.close,
-                                size: 16, color: Colors.red),
-                            label: const Text('Remove',
-                                style: TextStyle(color: Colors.red)),
-                            onPressed: () => _setQuickDate(null),
-                          ),
-                      ],
-                    ),
-                    if (_dueDate != null) ...[
-                      AppSpacing.heightXS,
-                      Text(
-                        'Scheduled for: ${DateFormatter.formatRelativeDay(_dueDate!)}${_dueDate!.hour == 0 && _dueDate!.minute == 0 ? "" : " at ${_dueDate!.hour.toString().padLeft(2, "0")}:${_dueDate!.minute.toString().padLeft(2, "0")}"}',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-
-                    AppSpacing.heightMD,
-
-                    // Project Picker Tile
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.folder_outlined),
-                      title: Text(
-                        currentProject == null
-                            ? 'No Project'
-                            : currentProject.name,
-                      ),
-                      trailing: _projectId != null
-                          ? IconButton(
-                              icon: const Icon(Icons.close),
-                              onPressed: () {
-                                HapticFeedback.lightImpact();
-                                setState(() {
-                                  _projectId = null;
-                                });
-                                _saveTask(isDismissing: false);
-                              },
-                            )
-                          : const Icon(Icons.chevron_right),
-                      onTap: () => _selectProject(context, projects),
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: projects.map((proj) {
+                        Color projColor;
+                        try {
+                          projColor =
+                              Color(int.parse('FF${proj.colorHex}', radix: 16));
+                        } catch (_) {
+                          projColor = AppColors.primary;
+                        }
+                        final isSelected = _projectId == proj.id;
+                        return _ProjectChip(
+                          label: proj.name,
+                          color: projColor,
+                          isSelected: isSelected,
+                          onTap: () {
+                            HapticFeedback.lightImpact();
+                            setState(() => _projectId = proj.id);
+                            _saveTask(isDismissing: false);
+                          },
+                        );
+                      }).toList(),
                     ),
 
-                    // Priority Selector
-                    AppSpacing.heightMD,
-                    Text('Priority', style: theme.textTheme.labelLarge),
-                    AppSpacing.heightXS,
+                    // ── Priority Section ──────────────────────────────────
+                    SizedBox(height: 24),
+                    Text(
+                      'PRIORITY',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color:
+                            theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
+                        letterSpacing: 1.2,
+                        fontSize: 13,
+                      ),
+                    ),
+                    SizedBox(height: 12),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        for (int level = 1; level <= 4; level++)
-                          _buildPriorityButton(level, theme),
+                        Expanded(
+                          child: _PriorityChip(
+                            label: 'High',
+                            color: AppColors.priorityHigh,
+                            isSelected: _priority == 1,
+                            onTap: () {
+                              _updatePriority(1);
+                            },
+                          ),
+                        ),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: _PriorityChip(
+                            label: 'Med',
+                            color: AppColors.priorityMedium,
+                            isSelected: _priority == 2,
+                            onTap: () {
+                              _updatePriority(2);
+                            },
+                          ),
+                        ),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: _PriorityChip(
+                            label: 'Low',
+                            color: AppColors.priorityLow,
+                            isSelected: _priority == 3,
+                            onTap: () {
+                              _updatePriority(3);
+                            },
+                          ),
+                        ),
                       ],
                     ),
-                    AppSpacing.heightLG,
 
-                    // Confirm / Save Button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: AppRadius.borderMD,
+                    // ── Due Date Section ──────────────────────────────────
+                    SizedBox(height: 24),
+                    Text(
+                      'DUE DATE',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color:
+                            theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
+                        letterSpacing: 1.2,
+                        fontSize: 13,
+                      ),
+                    ),
+                    SizedBox(height: 12),
+                    if (_dueDate != null)
+                      GestureDetector(
+                        onTap: () => _selectDueDate(context),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 18),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.white.withOpacity(0.05)
+                                : Colors.black.withOpacity(0.04),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: theme.dividerColor.withOpacity(0.5),
+                            ),
                           ),
-                          elevation: 2,
-                        ),
-                        onPressed: () async {
-                          final title = _titleController.text.trim();
-                          if (title.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Please enter a task title'),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  color: theme.dividerColor.withOpacity(0.3),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.calendar_today_rounded,
+                                  size: 22,
+                                  color: theme.textTheme.bodyLarge?.color,
+                                ),
                               ),
-                            );
-                            return;
-                          }
-                          
-                          // Save immediate (dismissing: true cancels debounce and saves immediately)
-                          await _saveTask(isDismissing: true);
-                          if (context.mounted) {
-                            context.pop();
-                          }
-                        },
-                        child: Text(
-                          widget.task == null ? 'Add Task' : 'Save Changes',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                              SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      DateFormatter.formatRelativeDay(
+                                          _dueDate!),
+                                      style: TextStyle(
+                                        fontSize: 16.sp,
+                                        fontWeight: FontWeight.w600,
+                                        color: theme.textTheme.bodyLarge?.color,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Scheduled for ${_dueDate!.hour.toString().padLeft(2, '0')}:${_dueDate!.minute.toString().padLeft(2, '0')}',
+                                      style: TextStyle(
+                                        fontSize: 13.sp,
+                                        fontWeight: FontWeight.w500,
+                                        color: theme.textTheme.bodySmall?.color
+                                            ?.withOpacity(0.6),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                Icons.edit_rounded,
+                                size: 24,
+                                color: AppColors.primary,
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      GestureDetector(
+                        onTap: () => _selectDueDate(context),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 18),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.white.withOpacity(0.05)
+                                : Colors.black.withOpacity(0.04),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: theme.dividerColor.withOpacity(0.5),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  color: theme.dividerColor.withOpacity(0.3),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.calendar_today_rounded,
+                                  size: 22,
+                                  color: theme.textTheme.bodyLarge?.color
+                                      ?.withOpacity(0.5),
+                                ),
+                              ),
+                              SizedBox(width: 16),
+                              Text(
+                                'Add due date',
+                                style: TextStyle(
+                                  fontSize: 16.sp,
+                                  fontWeight: FontWeight.w500,
+                                  color: theme.textTheme.bodySmall?.color
+                                      ?.withOpacity(0.5),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
+
+                    // ── Create Button ─────────────────────────────────────
+                    SizedBox(height: 32),
+                    _SaveButton(
+                      isNew: widget.task == null,
+                      onSave: () async {
+                        final title = _titleController.text.trim();
+                        if (title.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text('Please enter a task title'),
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                              backgroundColor: AppColors.primary,
+                            ),
+                          );
+                          return;
+                        }
+                        await _saveTask(isDismissing: true);
+                        if (context.mounted) context.pop();
+                      },
                     ),
-                    SizedBox(
-                        height: AppSpacing.xl +
-                            MediaQuery.of(context).viewInsets.bottom),
+
+                    SizedBox(height: bottomInset + AppSpacing.md),
                   ],
                 ),
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Sheet Header ─────────────────────────────────────────────────────────────
+
+class _SheetHeader extends StatelessWidget {
+  const _SheetHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      children: [
+        const SizedBox(height: 12),
+        Container(
+          width: 40,
+          height: 5,
+          decoration: BoxDecoration(
+            color: theme.dividerColor.withOpacity(0.4),
+            borderRadius: BorderRadius.circular(3),
+          ),
+        ),
+        SizedBox(height: 8),
+      ],
+    );
+  }
+}
+
+// ─── Project Chip ─────────────────────────────────────────────────────────────
+
+class _ProjectChip extends StatelessWidget {
+  final String label;
+  final Color color;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _ProjectChip({
+    required this.label,
+    required this.color,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? color
+              : isDark
+                  ? Colors.white.withOpacity(0.05)
+                  : Colors.black.withOpacity(0.04),
+          borderRadius: BorderRadius.circular(25),
+          border: Border.all(
+            color: isSelected ? color : theme.dividerColor.withOpacity(0.5),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected
+                ? (isDark ? Colors.black : Colors.white)
+                : theme.textTheme.bodyLarge?.color,
+            fontWeight: FontWeight.w600,
+            fontSize: 14.sp,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Priority Chip ────────────────────────────────────────────────────────────
+
+class _PriorityChip extends StatelessWidget {
+  final String label;
+  final Color color;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _PriorityChip({
+    required this.label,
+    required this.color,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? color.withOpacity(0.15)
+              : isDark
+                  ? Colors.white.withOpacity(0.05)
+                  : Colors.black.withOpacity(0.04),
+          borderRadius: BorderRadius.circular(25),
+          border: Border.all(
+            color: isSelected ? color : theme.dividerColor.withOpacity(0.5),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+              ),
+            ),
+            SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected
+                    ? color
+                    : theme.textTheme.bodyLarge?.color?.withOpacity(0.7),
+                fontWeight: FontWeight.w600,
+                fontSize: 14.sp,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Save Button ──────────────────────────────────────────────────────────────
+
+class _SaveButton extends StatefulWidget {
+  final bool isNew;
+  final VoidCallback onSave;
+
+  const _SaveButton({required this.isNew, required this.onSave});
+
+  @override
+  State<_SaveButton> createState() => _SaveButtonState();
+}
+
+class _SaveButtonState extends State<_SaveButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 120),
+        lowerBound: 0.95,
+        upperBound: 1.0,
+        value: 1.0);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    return ScaleTransition(
+      scale: _controller,
+      child: GestureDetector(
+        onTapDown: (_) => _controller.reverse(),
+        onTapUp: (_) {
+          _controller.forward();
+          widget.onSave();
+        },
+        onTapCancel: () => _controller.forward(),
+        child: Container(
+          width: double.infinity,
+          height: 60,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: isDark
+                  ? [const Color(0xFF9B7CFF), const Color(0xFF6C5CE7)]
+                  : [const Color(0xFF9B7CFF), const Color(0xFF6C5CE7)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(25),
+            boxShadow: [
+              BoxShadow(
+                color:
+                    (isDark ? const Color(0xFF9B7CFF) : const Color(0xFF9B7CFF))
+                        .withOpacity(0.4),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  widget.isNew ? Icons.add_task_rounded : Icons.check_rounded,
+                  color: Colors.white,
+                  size: 26,
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  widget.isNew ? 'Create Task' : 'Save Changes',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

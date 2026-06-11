@@ -8,6 +8,7 @@ import '../../domain/usecases/create_task.dart';
 import '../../domain/usecases/delete_task.dart';
 import '../../domain/usecases/update_task.dart';
 import '../../../../core/utils/notification_manager.dart';
+import '../../../settings/presentation/controllers/settings_provider.dart';
 
 // Provider for the Drift Database instance
 final databaseProvider = Provider<AppDatabase>((ref) {
@@ -61,8 +62,10 @@ class TasksController extends Notifier<AsyncValue<void>> {
         projectId: projectId,
       );
 
+      final notificationsEnabled = ref.read(settingsProvider).notificationsEnabled;
+
       // Schedule reminder if due date/time is set in the future
-      if (createdId != null && dueDate != null && dueDate.isAfter(DateTime.now())) {
+      if (notificationsEnabled && createdId != null && dueDate != null && dueDate.isAfter(DateTime.now())) {
         await NotificationManager.scheduleNotification(
           id: createdId!,
           title: title,
@@ -86,8 +89,9 @@ class TasksController extends Notifier<AsyncValue<void>> {
         // Cancel notification on completion
         await NotificationManager.cancelNotification(updatedTask.id);
       } else {
+        final notificationsEnabled = ref.read(settingsProvider).notificationsEnabled;
         // Reschedule reminder on uncomposing if due date is in the future
-        if (updatedTask.dueDate != null && updatedTask.dueDate!.isAfter(DateTime.now())) {
+        if (notificationsEnabled && updatedTask.dueDate != null && updatedTask.dueDate!.isAfter(DateTime.now())) {
           await NotificationManager.scheduleNotification(
             id: updatedTask.id,
             title: updatedTask.title,
@@ -107,7 +111,8 @@ class TasksController extends Notifier<AsyncValue<void>> {
 
       // Update scheduled notification
       await NotificationManager.cancelNotification(task.id);
-      if (!task.isCompleted && task.dueDate != null && task.dueDate!.isAfter(DateTime.now())) {
+      final notificationsEnabled = ref.read(settingsProvider).notificationsEnabled;
+      if (notificationsEnabled && !task.isCompleted && task.dueDate != null && task.dueDate!.isAfter(DateTime.now())) {
         await NotificationManager.scheduleNotification(
           id: task.id,
           title: task.title,
