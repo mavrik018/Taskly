@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:taskflow/features/projects/domain/entities/project.dart';
@@ -12,7 +11,6 @@ import '../../../tasks/presentation/controllers/tasks_provider.dart';
 import '../../../tasks/presentation/screens/task_detail_screen.dart';
 import '../../../tasks/presentation/widgets/task_list_view.dart';
 import '../../../../core/utils/confetti_service.dart';
-import '../../../../core/theme/theme_provider.dart';
 
 class ProjectsScreen extends ConsumerStatefulWidget {
   const ProjectsScreen({super.key});
@@ -61,6 +59,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
           return CustomScrollView(
             physics: const BouncingScrollPhysics(),
             slivers: [
+              /*
               // App Bar
               SliverAppBar(
                 floating: true,
@@ -93,6 +92,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
                   SizedBox(width: AppSpacing.sm),
                 ],
               ),
+              */
 
               // Status Overview
               SliverToBoxAdapter(
@@ -181,13 +181,14 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
                 )
               else
                 SliverPadding(
-                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                  padding: EdgeInsets.symmetric(
+                      horizontal: AppSpacing.lg, vertical: AppSpacing.h_lg),
                   sliver: SliverGrid(
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
                       crossAxisSpacing: 16.w,
                       mainAxisSpacing: 16.h,
-                      childAspectRatio: 1.2,
+                      childAspectRatio: 1.1,
                     ),
                     delegate: SliverChildBuilderDelegate(
                       (context, index) {
@@ -505,7 +506,7 @@ class _EmptyProjectsState extends StatelessWidget {
           ),
           AppSpacing.heightXS,
           Text(
-            'Organize your tasks into projects.\nFree tier: up to 5 projects.',
+            'Organize your tasks into projects.',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.textTheme.bodySmall?.color,

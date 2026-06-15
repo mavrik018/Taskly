@@ -5,6 +5,7 @@ enum SearchFilter {
   today,
   thisWeek,
   highPriority,
+  completed,
 }
 
 class SearchFilterNotifier extends Notifier<SearchFilter> {

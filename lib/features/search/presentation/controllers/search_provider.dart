@@ -82,6 +82,8 @@ final searchResultsProvider =
                 date.isBefore(weekEnd);
           case SearchFilter.highPriority:
             return task.priority == 1;
+          case SearchFilter.completed:
+            return task.isCompleted;
         }
       }).toList();
 

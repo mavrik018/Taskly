@@ -1,6 +1,6 @@
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,13 +31,7 @@ class NotificationManager {
   static Future<void> init(WidgetRef ref) async {
     // 1. Initialize timezones
     tz.initializeTimeZones();
-    try {
-      final String timeZoneName = DateTime.now().timeZoneName;
-      tz.setLocalLocation(tz.getLocation(timeZoneName));
-    } catch (_) {
-      // Safe fallback to UTC timezone
-      tz.setLocalLocation(tz.getLocation('UTC'));
-    }
+    _resolveLocalTimezone();
 
     // 2. Setup initialization settings
     const androidSettings =
@@ -79,6 +73,94 @@ class NotificationManager {
       }
     }
   }
+
+  /// Resolves the device's local timezone to a valid IANA name.
+  /// Android may return abbreviations (e.g. "PKT") or full names that differ
+  /// from IANA names. This method tries several strategies with UTC as fallback.
+  static void _resolveLocalTimezone() {
+    // Strategy 1: Try the raw timezone name from Dart
+    try {
+      final rawName = DateTime.now().timeZoneName;
+      tz.setLocalLocation(tz.getLocation(rawName));
+      return;
+    } catch (_) {}
+
+    // Strategy 2: Map common timezone abbreviations to IANA names
+    try {
+      final rawName = DateTime.now().timeZoneName;
+      final ianaName = _timezoneAbbreviationMap[rawName];
+      if (ianaName != null) {
+        tz.setLocalLocation(tz.getLocation(ianaName));
+        return;
+      }
+    } catch (_) {}
+
+    // Strategy 3: Use the UTC offset to guess the timezone
+
+    try {
+      final offset = DateTime.now().timeZoneOffset;
+      final offsetHours = offset.inHours;
+      final ianaByOffset = _offsetToTimezone[offsetHours];
+      if (ianaByOffset != null) {
+        tz.setLocalLocation(tz.getLocation(ianaByOffset));
+        return;
+      }
+    } catch (_) {}
+
+    // Final fallback: UTC
+    tz.setLocalLocation(tz.getLocation('UTC'));
+  }
+
+  /// Maps common timezone abbreviations to IANA timezone names
+  static const Map<String, String> _timezoneAbbreviationMap = {
+    'PKT': 'Asia/Karachi',
+    'IST': 'Asia/Kolkata',
+    'EST': 'America/New_York',
+    'CST': 'America/Chicago',
+    'MST': 'America/Denver',
+    'PST': 'America/Los_Angeles',
+    'GMT': 'Europe/London',
+    'UTC': 'UTC',
+    'CET': 'Europe/Paris',
+    'EET': 'Europe/Athens',
+    'JST': 'Asia/Tokyo',
+    'CST_CN': 'Asia/Shanghai',
+    'AEST': 'Australia/Sydney',
+    'SGT': 'Asia/Singapore',
+    'GST': 'Asia/Dubai',
+    'AST': 'America/Halifax',
+    'BRT': 'America/Sao_Paulo',
+    'MSK': 'Europe/Moscow',
+  };
+
+  /// Maps UTC offset hours to a representative IANA timezone
+  static const Map<int, String> _offsetToTimezone = {
+    -12: 'Etc/GMT+12',
+    -11: 'Pacific/Apia',
+    -10: 'Pacific/Honolulu',
+    -9: 'America/Anchorage',
+    -8: 'America/Los_Angeles',
+    -7: 'America/Denver',
+    -6: 'America/Chicago',
+    -5: 'America/New_York',
+    -4: 'America/Halifax',
+    -3: 'America/Sao_Paulo',
+    -2: 'Etc/GMT+2',
+    -1: 'Atlantic/Azores',
+    0: 'Europe/London',
+    1: 'Europe/Paris',
+    2: 'Europe/Athens',
+    3: 'Europe/Moscow',
+    4: 'Asia/Dubai',
+    5: 'Asia/Karachi',
+    6: 'Asia/Almaty',
+    7: 'Asia/Bangkok',
+    8: 'Asia/Shanghai',
+    9: 'Asia/Tokyo',
+    10: 'Australia/Sydney',
+    11: 'Pacific/Noumea',
+    12: 'Pacific/Auckland',
+  };
 
   /// Helper to prompt a friendly double-dialog permission flow
   static Future<bool> requestPermissions(BuildContext context) async {
@@ -162,11 +244,31 @@ class NotificationManager {
     return false;
   }
 
+  /// Motivational messages shown as notification body
+  static const List<String> _attentionMessages = [
+    'This task needs your attention!',
+    'Time to tackle this one — you\'ve got this!',
+    'Don\'t let this one slip through the cracks.',
+    'Action needed — stay on top of your game!',
+    'This is calling your name. Get it done!',
+    'Knock this task out and keep the momentum!',
+    'Quick reminder — this task is waiting for you.',
+    'Finish line is close. Take care of this now!',
+    'Hey! This task needs a little love today.',
+    'One step closer to done — handle this task!',
+    'Champions don\'t procrastinate. Time to act!',
+    'Deadline\'s approaching — don\'t wait too long!',
+  ];
+
+  /// Returns a random attention message
+  static String _randomMessage() {
+    return _attentionMessages[Random().nextInt(_attentionMessages.length)];
+  }
+
   /// Schedules a zoned push notification for a specific task
   static Future<void> scheduleNotification({
     required int id,
     required String title,
-    String? body,
     required DateTime scheduledTime,
   }) async {
     if (scheduledTime.isBefore(DateTime.now())) return;
@@ -196,7 +298,7 @@ class NotificationManager {
     await _plugin.zonedSchedule(
       id: id,
       title: title,
-      body: body,
+      body: _randomMessage(),
       scheduledDate: tzDateTime,
       notificationDetails: details,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,

@@ -2,12 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_radius.dart';
-import '../../core/theme/app_spacing.dart';
 import '../../core/utils/notification_manager.dart';
-import '../../features/tasks/presentation/controllers/tasks_provider.dart';
-import '../../features/tasks/presentation/screens/task_detail_screen.dart';
 
 class AppShell extends ConsumerStatefulWidget {
   final Widget child;
@@ -68,29 +63,18 @@ class _AppShellState extends ConsumerState<AppShell> {
     final selectedIndex = _calculateSelectedIndex(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    // Listen to notification tap events and launch the deep-linked detail sheet
-    ref.listen<int?>(notificationTapProvider, (previous, next) async {
+    // Listen to notification tap events and navigate to home screen
+    ref.listen<int?>(notificationTapProvider, (previous, next) {
       if (next != null) {
         ref.read(notificationTapProvider.notifier).set(null);
-
-        final repository = ref.read(taskRepositoryProvider);
-        final task = await repository.getTaskById(next);
-
-        if (task != null && context.mounted) {
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            builder: (context) => FractionallySizedBox(
-              heightFactor: 0.85,
-              child: TaskDetailScreen(task: task),
-            ),
-          );
+        if (context.mounted) {
+          context.go('/');
         }
       }
     });
 
     return Scaffold(
-      body: widget.child,
+      body: SafeArea(child: widget.child),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: theme.scaffoldBackgroundColor,

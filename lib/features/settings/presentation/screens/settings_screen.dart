@@ -24,16 +24,6 @@ class SettingsScreen extends ConsumerWidget {
     final userName = onboardingState.value?.userName ?? 'Productivity Champ';
 
     return Scaffold(
-      appBar: AppBar(
-        centerTitle: true,
-        title: Text(
-          'TaskFlow',
-          style: theme.textTheme.headlineLarge?.copyWith(
-            fontWeight: FontWeight.w900,
-            color: theme.colorScheme.onSurface,
-          ),
-        ),
-      ),
       body: SafeArea(
         child: ListView(
           padding: EdgeInsets.symmetric(
@@ -68,11 +58,58 @@ class SettingsScreen extends ConsumerWidget {
                       ),
                     ),
                     SizedBox(width: AppSpacing.md),
-                    Text(
-                      userName,
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
+                    Expanded(
+                      child: Text(
+                        userName,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        Icons.edit_outlined,
+                        size: 20.sp,
+                        color: theme.colorScheme.secondary,
+                      ),
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        showDialog(
+                          context: context,
+                          builder: (context) {
+                            final controller =
+                                TextEditingController(text: userName);
+                            return AlertDialog(
+                              title: const Text('Edit Name'),
+                              content: TextField(
+                                controller: controller,
+                                decoration:
+                                    const InputDecoration(labelText: 'Name'),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () async {
+                                    if (controller.text.trim().isNotEmpty) {
+                                      await ref
+                                          .read(onboardingProvider.notifier)
+                                          .updateUserName(
+                                              controller.text.trim());
+                                      if (context.mounted) {
+                                        Navigator.pop(context);
+                                      }
+                                    }
+                                  },
+                                  child: const Text('Save'),
+                                ),
+                              ],
+                            );
+                          },
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -133,6 +170,7 @@ class SettingsScreen extends ConsumerWidget {
             ),
             SizedBox(height: AppSpacing.md),
 
+            /*
             // Account Section
             Text(
               'ACCOUNT',
@@ -236,44 +274,45 @@ class SettingsScreen extends ConsumerWidget {
                   //                   groupValue: settingsState.subscriptionTier,
                   //                   onChanged: (value) async {
                   //                     if (value != null) {
-                  //                       await ref
-                  //                           .read(settingsProvider.notifier)
-                  //                           .setSubscriptionTier(value);
-                  //                       if (context.mounted)
-                  //                         Navigator.pop(context);
-                  //                     }
-                  //                   },
-                  //                 ),
-                  //               ),
-                  //               ListTile(
-                  //                 title: const Text('PRO Plan'),
-                  //                 subtitle: const Text(
-                  //                     'Unlimited projects & priority support'),
-                  //                 leading: Radio<String>(
-                  //                   value: 'PRO',
-                  //                   groupValue: settingsState.subscriptionTier,
-                  //                   onChanged: (value) async {
-                  //                     if (value != null) {
-                  //                       await ref
-                  //                           .read(settingsProvider.notifier)
-                  //                           .setSubscriptionTier(value);
-                  //                       if (context.mounted)
-                  //                         Navigator.pop(context);
-                  //                     }
-                  //                   },
-                  //                 ),
-                  //               ),
-                  //             ],
-                  //           ),
-                  //         );
-                  //       },
-                  //     );
-                  //   },
-                  // ),
-                ],
-              ),
-            ),
-            SizedBox(height: AppSpacing.md),
+                      //                       await ref
+                      //                           .read(settingsProvider.notifier)
+                      //                           .setSubscriptionTier(value);
+                      //                       if (context.mounted)
+                      //                         Navigator.pop(context);
+                      //                     }
+                      //                   },
+                      //                 ),
+                      //               ),
+                      //               ListTile(
+                      //                 title: const Text('PRO Plan'),
+                      //                 subtitle: const Text(
+                      //                     'Unlimited projects & priority support'),
+                      //                 leading: Radio<String>(
+                      //                   value: 'PRO',
+                      //                   groupValue: settingsState.subscriptionTier,
+                      //                   onChanged: (value) async {
+                      //                     if (value != null) {
+                      //                       await ref
+                      //                           .read(settingsProvider.notifier)
+                      //                           .setSubscriptionTier(value);
+                      //                       if (context.mounted)
+                      //                         Navigator.pop(context);
+                      //                     }
+                      //                   },
+                      //                 ),
+                      //               ),
+                      //             ],
+                      //           ),
+                      //         );
+                      //       },
+                      //     );
+                      //   },
+                      // ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: AppSpacing.md),
+                */
 
             // Clear All Data
             SizedBox(

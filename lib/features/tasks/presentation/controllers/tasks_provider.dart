@@ -69,7 +69,6 @@ class TasksController extends Notifier<AsyncValue<void>> {
         await NotificationManager.scheduleNotification(
           id: createdId!,
           title: title,
-          body: description?.isEmpty ?? true ? 'Reminder for your task' : description,
           scheduledTime: dueDate,
         );
       }
@@ -95,7 +94,6 @@ class TasksController extends Notifier<AsyncValue<void>> {
           await NotificationManager.scheduleNotification(
             id: updatedTask.id,
             title: updatedTask.title,
-            body: updatedTask.description?.isEmpty ?? true ? 'Reminder for your task' : updatedTask.description,
             scheduledTime: updatedTask.dueDate!,
           );
         }
@@ -116,7 +114,6 @@ class TasksController extends Notifier<AsyncValue<void>> {
         await NotificationManager.scheduleNotification(
           id: task.id,
           title: task.title,
-          body: task.description?.isEmpty ?? true ? 'Reminder for your task' : task.description,
           scheduledTime: task.dueDate!,
         );
       }

@@ -33,7 +33,7 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper>
 
   // Constants
   static const double _deleteRevealWidth = 80.0;
-  static const double _completeThreshold = 100.0;
+  static const double _completeRevealWidth = 80.0;
 
   @override
   void initState() {
@@ -63,17 +63,17 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper>
 
       // Restrict drag bounds
       if (_dragOffset > 0) {
-        // Dragging right (Complete)
-        // Add resistance/damping if dragging past threshold
-        if (_dragOffset > _completeThreshold) {
-          _dragOffset = _completeThreshold + (_dragOffset - _completeThreshold) * 0.3;
+        // Dragging right (Complete reveal)
+        // Add resistance past complete width
+        if (_dragOffset > _completeRevealWidth) {
+          _dragOffset = _completeRevealWidth + (_dragOffset - _completeRevealWidth) * 0.3;
         }
 
         // Haptic feedback trigger on crossing threshold
-        if (_dragOffset >= _completeThreshold && !_hapticTriggered) {
-          HapticFeedback.mediumImpact();
+        if (_dragOffset >= _completeRevealWidth / 2 && !_hapticTriggered) {
+          HapticFeedback.lightImpact();
           _hapticTriggered = true;
-        } else if (_dragOffset < _completeThreshold && _hapticTriggered) {
+        } else if (_dragOffset < _completeRevealWidth / 2 && _hapticTriggered) {
           _hapticTriggered = false;
         }
       } else {
@@ -81,6 +81,14 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper>
         // Add resistance past delete width
         if (_dragOffset < -_deleteRevealWidth) {
           _dragOffset = -_deleteRevealWidth + (_dragOffset + _deleteRevealWidth) * 0.3;
+        }
+
+        // Haptic feedback trigger on crossing threshold
+        if (_dragOffset.abs() >= _deleteRevealWidth / 2 && !_hapticTriggered) {
+          HapticFeedback.lightImpact();
+          _hapticTriggered = true;
+        } else if (_dragOffset.abs() < _deleteRevealWidth / 2 && _hapticTriggered) {
+          _hapticTriggered = false;
         }
       }
     });
@@ -90,11 +98,13 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper>
     if (_isDeleting) return;
 
     if (_dragOffset > 0) {
-      // Swipe Right: check if completed
-      if (_dragOffset >= _completeThreshold) {
-        widget.onComplete();
+      // Swipe Right: check if revealed
+      if (_dragOffset >= _completeRevealWidth / 2) {
+        _snapTo(_completeRevealWidth);
+        HapticFeedback.lightImpact();
+      } else {
+        _snapTo(0.0);
       }
-      _snapTo(0.0);
     } else {
       // Swipe Left: check if revealed
       if (_dragOffset.abs() >= _deleteRevealWidth / 2) {
@@ -132,6 +142,12 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper>
     widget.onDelete();
   }
 
+  void _triggerComplete() {
+    HapticFeedback.mediumImpact();
+    widget.onComplete();
+    _snapTo(0.0);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isDeleting) {
@@ -159,19 +175,29 @@ class _SwipeActionWrapperState extends State<SwipeActionWrapper>
                 borderRadius: AppRadius.borderLG,
                 child: Stack(
                   children: [
-                    // Right swipe indicator (Complete)
+                    // Right swipe action (Complete Button sits physically underneath)
                     if (_dragOffset > 0)
-                      AnimatedContainer(
-                        duration: Duration.zero,
-                        color: AppColors.priorityLow.withOpacity(
-                          (_dragOffset / _completeThreshold).clamp(0.1, 0.25),
-                        ),
-                        alignment: Alignment.centerLeft,
-                        padding: EdgeInsets.only(left: 24.w),
-                        child: Icon(
-                          widget.isCompleted ? Icons.radio_button_unchecked : Icons.check_circle,
-                          color: AppColors.priorityLow,
-                          size: 24.sp,
+                      Positioned(
+                        left: 0,
+                        top: AppSpacing.xs,
+                        bottom: AppSpacing.xs,
+                        width: _completeRevealWidth.w,
+                        child: GestureDetector(
+                          onTap: _triggerComplete,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: AppColors.priorityLow,
+                              borderRadius: BorderRadius.horizontal(
+                                left: Radius.circular(16.r),
+                              ),
+                            ),
+                            alignment: Alignment.center,
+                            child: Icon(
+                              widget.isCompleted ? Icons.radio_button_unchecked : Icons.check_circle,
+                              color: Colors.white,
+                              size: 24.sp,
+                            ),
+                          ),
                         ),
                       ),
 
