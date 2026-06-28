@@ -14,6 +14,8 @@ import '../../../../core/utils/debounce.dart';
 import '../../../../core/utils/semantics_service.dart';
 import '../../../../core/services/ai_service.dart';
 import '../../../../core/utils/error_mapper.dart';
+import '../../../auth/presentation/controllers/auth_provider.dart';
+import '../../../../shared/widgets/premium_promo_dialog.dart';
 
 class TaskDetailScreen extends ConsumerStatefulWidget {
   final Task? task;
@@ -123,7 +125,7 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen>
         lower.contains('saturday') ||
         lower.contains('sunday');
 
-    if (!hasKeywords) return;
+    if (ref.read(authProvider) == null || !hasKeywords) return;
 
     setState(() {
       _isParsing = true;
@@ -178,6 +180,16 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen>
   }
 
   Future<void> _runExplicitSmartParse() async {
+    if (ref.read(authProvider) == null) {
+      PremiumPromoDialog.show(
+        context: context,
+        title: 'Smart Task Parser',
+        content: 'Natural language parsing is a premium feature. Please sign in or register to parse details instantly.',
+        icon: Icons.bolt_rounded,
+      );
+      return;
+    }
+
     final text = _smartParserController.text.trim();
     if (text.isEmpty) return;
 

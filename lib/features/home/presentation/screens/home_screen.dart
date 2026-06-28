@@ -22,6 +22,7 @@ import '../../../../core/utils/confetti_service.dart';
 import '../../../../core/theme/theme_provider.dart';
 import '../../../../core/utils/error_mapper.dart';
 import '../../../../core/utils/streak_manager.dart';
+import '../../../../shared/widgets/premium_promo_dialog.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -98,6 +99,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _rescheduleTasksRealistically(List<Task> overdueTasks) async {
+    if (ref.read(authProvider) == null) {
+      PremiumPromoDialog.show(
+        context: context,
+        title: 'Overdue Reschedule Helper',
+        content: 'AI Overdue Rescheduling is a premium feature. Please sign in or register to reschedule realistically.',
+        icon: Icons.warning_amber_rounded,
+      );
+      return;
+    }
+
     setState(() {
       _reschedulingTasks = true;
     });
@@ -482,155 +493,251 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ).animate().fadeIn(duration: 400.ms),
 
                         // Daily focus recommendation card
-                        if (!_dismissedFocusSuggestion &&
-                            _focusSuggestion != null)
-                          Container(
-                            margin: EdgeInsets.only(bottom: AppSpacing.md),
-                            padding: EdgeInsets.all(AppSpacing.md),
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? Colors.white.withValues(alpha: 0.05)
-                                  : Colors.black.withValues(alpha: 0.03),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                  color: isDark
-                                      ? Colors.white.withValues(alpha: 0.15)
-                                      : Colors.black.withValues(alpha: 0.1)),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        // FIX: was hardcoded Colors.white — invisible
-                                        // against this card's near-white background
-                                        // in light mode. Now theme-aware.
-                                        Icon(Icons.auto_awesome_rounded,
-                                            color: isDark
-                                                ? Colors.white
-                                                : Colors.black,
-                                            size: 20.sp),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          'Daily Focus Suggestion',
-                                          style: theme.textTheme.titleMedium
-                                              ?.copyWith(
-                                            fontWeight: FontWeight.bold,
-                                            color: isDark
-                                                ? Colors.white
-                                                : Colors.black,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    IconButton(
-                                      icon: Icon(
-                                        Icons.close,
-                                        size: 18,
-                                        color: isDark
-                                            ? Colors.white70
-                                            : Colors.black54,
-                                      ),
-                                      onPressed: () => setState(() =>
-                                          _dismissedFocusSuggestion = true),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  _focusSuggestion!['message']?.toString() ??
-                                      '',
-                                  style: TextStyle(
-                                    fontSize: 13.sp,
-                                    height: 1.4,
-                                    // FIX: was Colors.white.withOpacity(0.8) — same
-                                    // light-mode visibility issue as the icon above.
-                                    color: theme.textTheme.bodyMedium?.color
-                                        ?.withValues(alpha: 0.85),
-                                  ),
-                                ),
-                                if (_focusSuggestion!['task_ids'] != null) ...[
-                                  const SizedBox(height: 12),
-                                  Column(
-                                    children: (_focusSuggestion!['task_ids']
-                                            as List<dynamic>)
-                                        .map<Widget>((id) {
-                                      final parsedId =
-                                          int.tryParse(id.toString());
-                                      final matchedTask = tasks.firstWhere(
-                                        (t) => t.id == parsedId,
-                                        orElse: () => Task(
-                                            id: -1,
-                                            title: '',
-                                            priority: 4,
-                                            isCompleted: false),
-                                      );
-                                      if (matchedTask.id == -1 ||
-                                          matchedTask.title.isEmpty) {
-                                        return const SizedBox.shrink();
-                                      }
-                                      // Suggested-task pill: monochrome, theme-aware
-                                      // fill instead of the old solid purple chip.
-                                      return Container(
-                                        margin:
-                                            const EdgeInsets.only(bottom: 8),
-                                        width: double.infinity,
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 14, vertical: 10),
-                                        decoration: BoxDecoration(
-                                          color: isDark
-                                              ? Colors.white
-                                                  .withValues(alpha: 0.08)
-                                              : Colors.black
-                                                  .withValues(alpha: 0.05),
-                                          borderRadius:
-                                              BorderRadius.circular(14),
-                                          border: Border.all(
+                        if (!_dismissedFocusSuggestion) ...[
+                          if (_focusSuggestion != null)
+                            Container(
+                              margin: EdgeInsets.only(bottom: AppSpacing.md),
+                              padding: EdgeInsets.all(AppSpacing.md),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.05)
+                                    : Colors.black.withValues(alpha: 0.03),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                    color: isDark
+                                        ? Colors.white.withValues(alpha: 0.15)
+                                        : Colors.black.withValues(alpha: 0.1)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          // FIX: was hardcoded Colors.white — invisible
+                                          // against this card's near-white background
+                                          // in light mode. Now theme-aware.
+                                          Icon(Icons.auto_awesome_rounded,
                                               color: isDark
                                                   ? Colors.white
-                                                      .withValues(alpha: 0.15)
-                                                  : Colors.black
-                                                      .withValues(alpha: 0.12)),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              Icons.auto_awesome_rounded,
+                                                  : Colors.black,
+                                              size: 20.sp),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'Daily Focus Suggestion',
+                                            style: theme.textTheme.titleMedium
+                                                ?.copyWith(
+                                              fontWeight: FontWeight.bold,
                                               color: isDark
                                                   ? Colors.white
-                                                      .withValues(alpha: 0.9)
-                                                  : Colors.black
-                                                      .withValues(alpha: 0.8),
-                                              size: 14,
+                                                  : Colors.black,
                                             ),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                              child: Text(
-                                                matchedTask.title,
-                                                style: TextStyle(
-                                                  fontSize: 12.sp,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: isDark
-                                                      ? Colors.white.withValues(
-                                                          alpha: 0.9)
-                                                      : Colors.black.withValues(
-                                                          alpha: 0.8),
+                                          ),
+                                        ],
+                                      ),
+                                      IconButton(
+                                        icon: Icon(
+                                          Icons.close,
+                                          size: 18,
+                                          color: isDark
+                                              ? Colors.white70
+                                              : Colors.black54,
+                                        ),
+                                        onPressed: () => setState(() =>
+                                            _dismissedFocusSuggestion = true),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    _focusSuggestion!['message']?.toString() ??
+                                        '',
+                                    style: TextStyle(
+                                      fontSize: 13.sp,
+                                      height: 1.4,
+                                      // FIX: was Colors.white.withOpacity(0.8) — same
+                                      // light-mode visibility issue as the icon above.
+                                      color: theme.textTheme.bodyMedium?.color
+                                          ?.withValues(alpha: 0.85),
+                                    ),
+                                  ),
+                                  if (_focusSuggestion!['task_ids'] != null) ...[
+                                    const SizedBox(height: 12),
+                                    Column(
+                                      children: (_focusSuggestion!['task_ids']
+                                              as List<dynamic>)
+                                          .map<Widget>((id) {
+                                        final parsedId =
+                                            int.tryParse(id.toString());
+                                        final matchedTask = tasks.firstWhere(
+                                          (t) => t.id == parsedId,
+                                          orElse: () => Task(
+                                              id: -1,
+                                              title: '',
+                                              priority: 4,
+                                              isCompleted: false),
+                                        );
+                                        if (matchedTask.id == -1 ||
+                                            matchedTask.title.isEmpty) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        // Suggested-task pill: monochrome, theme-aware
+                                        // fill instead of the old solid purple chip.
+                                        return Container(
+                                          margin:
+                                              const EdgeInsets.only(bottom: 8),
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 14, vertical: 10),
+                                          decoration: BoxDecoration(
+                                            color: isDark
+                                                ? Colors.white
+                                                    .withValues(alpha: 0.08)
+                                                : Colors.black
+                                                    .withValues(alpha: 0.05),
+                                            borderRadius:
+                                                BorderRadius.circular(14),
+                                            border: Border.all(
+                                                color: isDark
+                                                    ? Colors.white
+                                                        .withValues(alpha: 0.15)
+                                                    : Colors.black
+                                                        .withValues(alpha: 0.12)),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.auto_awesome_rounded,
+                                                color: isDark
+                                                    ? Colors.white
+                                                        .withValues(alpha: 0.9)
+                                                    : Colors.black
+                                                        .withValues(alpha: 0.8),
+                                                size: 14,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  matchedTask.title,
+                                                  style: TextStyle(
+                                                    fontSize: 12.sp,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: isDark
+                                                        ? Colors.white.withValues(
+                                                            alpha: 0.9)
+                                                        : Colors.black.withValues(
+                                                            alpha: 0.8),
+                                                  ),
                                                 ),
                                               ),
+                                            ],
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            )
+                          else if (currentUser == null)
+                            Container(
+                              margin: EdgeInsets.only(bottom: AppSpacing.md),
+                              padding: EdgeInsets.all(AppSpacing.md),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.05)
+                                    : Colors.black.withValues(alpha: 0.03),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                    color: isDark
+                                        ? Colors.white.withValues(alpha: 0.15)
+                                        : Colors.black.withValues(alpha: 0.1)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Icon(Icons.auto_awesome_rounded,
+                                              color: isDark
+                                                  ? Colors.white
+                                                  : Colors.black,
+                                              size: 20.sp),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'Daily Focus Suggestion',
+                                            style: theme.textTheme.titleMedium
+                                                ?.copyWith(
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark
+                                                  ? Colors.white
+                                                  : Colors.black,
                                             ),
-                                          ],
+                                          ),
+                                        ],
+                                      ),
+                                      IconButton(
+                                        icon: Icon(
+                                          Icons.close,
+                                          size: 18,
+                                          color: isDark
+                                              ? Colors.white70
+                                              : Colors.black54,
                                         ),
-                                      );
-                                    }).toList(),
+                                        onPressed: () => setState(() =>
+                                            _dismissedFocusSuggestion = true),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Let AI analyze your tasks and suggest the optimal daily focus to keep you productive.',
+                                    style: TextStyle(
+                                      fontSize: 13.sp,
+                                      height: 1.4,
+                                      color: theme.textTheme.bodyMedium?.color
+                                          ?.withValues(alpha: 0.85),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 40,
+                                    child: ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor:
+                                            isDark ? Colors.white : Colors.black,
+                                        foregroundColor:
+                                            isDark ? Colors.black : Colors.white,
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12)),
+                                      ),
+                                      onPressed: () {
+                                        PremiumPromoDialog.show(
+                                          context: context,
+                                          title: 'Daily Focus Suggestion',
+                                          content: 'AI Daily Focus Suggestion is a premium feature. Please sign in or register to get focus suggestions.',
+                                          icon: Icons.auto_awesome_rounded,
+                                        );
+                                      },
+                                      child: const Text('Suggest Focus',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.bold)),
+                                    ),
                                   ),
                                 ],
-                              ],
+                              ),
                             ),
-                          ).animate().fadeIn(duration: 400.ms),
+                        ]
+
                       ],
                     ),
                   ),

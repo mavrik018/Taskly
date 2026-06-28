@@ -50,10 +50,15 @@ class SupabaseService {
   static Future<AuthResponse?> signUp({
     required String email,
     required String password,
+    String? name,
   }) async {
     final c = client;
     if (c == null) throw Exception('Supabase is not initialized');
-    return await c.auth.signUp(email: email, password: password);
+    return await c.auth.signUp(
+      email: email,
+      password: password,
+      data: name != null ? {'name': name} : null,
+    );
   }
 
   static Future<AuthResponse?> signIn({

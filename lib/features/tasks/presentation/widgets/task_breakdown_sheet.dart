@@ -9,6 +9,7 @@ import '../../domain/entities/task.dart';
 import '../controllers/tasks_provider.dart';
 import '../../../../core/services/ai_service.dart';
 import '../../../../core/utils/error_mapper.dart';
+import '../../../../shared/widgets/premium_promo_dialog.dart';
 
 class TaskBreakdownSheet extends ConsumerStatefulWidget {
   final Task task;
@@ -49,9 +50,21 @@ class _TaskBreakdownSheetState extends ConsumerState<TaskBreakdownSheet> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = ErrorMapper.getAIErrorMessage(e);
           _loading = false;
         });
+        if (e.toString().toLowerCase().contains('premium')) {
+          Navigator.pop(context); // Close the sheet
+          PremiumPromoDialog.show(
+            context: context,
+            title: 'Task Breakdown',
+            content: 'AI Task Breakdown is a premium feature. Please sign in or register to decompose complex tasks.',
+            icon: Icons.playlist_add_check_rounded,
+          );
+        } else {
+          setState(() {
+            _error = ErrorMapper.getAIErrorMessage(e);
+          });
+        }
       }
     }
   }

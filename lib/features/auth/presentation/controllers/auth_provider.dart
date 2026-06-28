@@ -1,5 +1,8 @@
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:taskflow/features/onboarding/presentation/controllers/onboarding_provider.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../../../../core/services/sync_service.dart';
 import '../../../tasks/presentation/controllers/tasks_provider.dart';
@@ -20,17 +23,19 @@ class AuthNotifier extends Notifier<User?> {
   }
 
   void _initListener() {
-    SupabaseService.authStateChanges.listen((data) {
+    SupabaseService.authStateChanges.listen((data) async {
       state = data.session?.user;
       if (data.session?.user != null) {
         // Trigger sync when user signs in
         ref.read(syncServiceProvider).sync();
+        // Sync profile name
+        await ref.read(onboardingProvider.notifier).syncProfileName();
       }
     });
   }
 
-  Future<void> signUp(String email, String password) async {
-    await SupabaseService.signUp(email: email, password: password);
+  Future<void> signUp(String email, String password, {String? name}) async {
+    await SupabaseService.signUp(email: email, password: password, name: name);
   }
 
   Future<void> signIn(String email, String password) async {
@@ -38,6 +43,33 @@ class AuthNotifier extends Notifier<User?> {
   }
 
   Future<void> signOut() async {
+    // 1. Sync first
+    try {
+      await ref.read(syncServiceProvider).sync();
+    } catch (e) {
+      debugPrint('Sync failed before signOut: $e');
+    }
+
+    // 2. Delete all local database data
+    try {
+      final db = ref.read(databaseProvider);
+      await db.transaction(() async {
+        await db.delete(db.tasks).go();
+        await db.delete(db.projects).go();
+      });
+    } catch (e) {
+      debugPrint('Failed to clear database: $e');
+    }
+
+    // 3. Clear SharedPreferences
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+    } catch (e) {
+      debugPrint('Failed to clear shared preferences: $e');
+    }
+
+    // 4. Perform Supabase signOut
     await SupabaseService.signOut();
   }
 }

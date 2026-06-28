@@ -4,7 +4,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AIService {
-  static bool get _isPremium => true;
+  static bool get _isPremium {
+    try {
+      return Supabase.instance.client.auth.currentUser != null;
+    } catch (_) {
+      return false;
+    }
+  }
 
   // Client-Side Rate & Cooldown Tracker
   static Future<bool> _checkLimitAndTrack(String action, int limitPerDay,

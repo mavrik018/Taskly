@@ -24,34 +24,11 @@ class _SlideData {
   });
 }
 
-enum _IllustrationType { tasks, projects, name, premium }
+enum _IllustrationType { name, premium }
 
 // ─── Slide definitions ────────────────────────────────────────────────────────
 
 const List<_SlideData> _slides = [
-  _SlideData(
-    title: 'Welcome to',
-    subtitle: 'TaskFlow',
-    description: 'Your premium task manager with AI-powered focus',
-    gradient: [Color(0xFF1C1C1E), Color(0xFF09090B), Color(0xFF000000)],
-    illustration: _IllustrationType.tasks,
-  ),
-  _SlideData(
-    title: 'Organise with',
-    subtitle: 'Projects',
-    description:
-        'Group tasks into focused workspaces. Keep personal goals, work deliverables, and side projects cleanly separated.',
-    gradient: [Color(0xFF2C2C2E), Color(0xFF1C1C1E), Color(0xFF09090B)],
-    illustration: _IllustrationType.projects,
-  ),
-  _SlideData(
-    title: "What's your",
-    subtitle: 'Name?',
-    description:
-        'Let us personalise your experience. We will greet you every morning and keep your focus sharp.',
-    gradient: [Color(0xFF1C1C1E), Color(0xFF09090B), Color(0xFF000000)],
-    illustration: _IllustrationType.name,
-  ),
   _SlideData(
     title: 'Unlock AI',
     subtitle: 'Superpowers',
@@ -74,7 +51,6 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
     with TickerProviderStateMixin {
   final PageController _pageController = PageController();
-  final TextEditingController _nameController = TextEditingController();
   late AnimationController _bgController;
   late AnimationController _floatController;
   int _currentPage = 0;
@@ -101,7 +77,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
   @override
   void dispose() {
     _pageController.dispose();
-    _nameController.dispose();
     _bgController.dispose();
     _floatController.dispose();
     super.dispose();
@@ -126,9 +101,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
   Future<void> _finishAsGuest() async {
     HapticFeedback.mediumImpact();
     setState(() => _isLoading = true);
-    final name = _nameController.text.trim();
-    final nameToUse = name.isEmpty ? 'Champion' : name;
-    await ref.read(onboardingProvider.notifier).completeOnboarding(nameToUse);
+    await ref.read(onboardingProvider.notifier).completeOnboarding('Champion');
     if (mounted) {
       setState(() => _isLoading = false);
       context.go('/');
@@ -138,9 +111,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
   Future<void> _finishAsPremium() async {
     HapticFeedback.heavyImpact();
     setState(() => _isLoading = true);
-    final name = _nameController.text.trim();
-    final nameToUse = name.isEmpty ? 'Champion' : name;
-    await ref.read(onboardingProvider.notifier).completeOnboarding(nameToUse);
+    await ref.read(onboardingProvider.notifier).completeOnboarding('Champion');
     if (mounted) {
       setState(() => _isLoading = false);
       context.go('/auth');
@@ -217,33 +188,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
               onPageChanged: (i) => setState(() => _currentPage = i),
               itemCount: _slides.length,
               itemBuilder: (context, index) {
-                if (index == 2)
-                  return _NamePage(
-                      controller: _nameController, onNext: _nextPage);
-                if (index == 3) {
+                if (index == 0) {
                   return _PremiumChoicePage(
                     isLoading: _isLoading,
                     onGuest: _finishAsGuest,
                     onPremium: _finishAsPremium,
                   );
                 }
-                return _InfoPage(
-                    slide: _slides[index], floatAnim: _floatController);
+                return const SizedBox.shrink();
               },
             ),
-
-            // ── Bottom bar (dots + button) ─────────────────────────────────
-            if (_currentPage < 2)
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: _BottomBar(
-                  currentPage: _currentPage,
-                  totalPages: _slides.length,
-                  onNext: _nextPage,
-                ),
-              ),
           ],
         ),
       ),
@@ -251,203 +205,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
   }
 }
 
-// ─── Info page (slides 0 & 1) ─────────────────────────────────────────────────
-
-class _InfoPage extends StatelessWidget {
-  final _SlideData slide;
-  final AnimationController floatAnim;
-  const _InfoPage({required this.slide, required this.floatAnim});
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 32.w),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(height: 60.h),
-            // Illustration area
-            Expanded(
-              flex: 5,
-              child: Center(
-                child: AnimatedBuilder(
-                  animation: floatAnim,
-                  builder: (_, __) => Transform.translate(
-                    offset: Offset(0, -8 + floatAnim.value * 16),
-                    child: _Illustration(type: slide.illustration),
-                  ),
-                ),
-              ),
-            ),
-            // Text content
-            Expanded(
-              flex: 4,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    slide.title,
-                    style: TextStyle(
-                      fontSize: 32.sp,
-                      fontWeight: FontWeight.w300,
-                      color: Colors.white.withOpacity(0.75),
-                      letterSpacing: -0.5,
-                    ),
-                  )
-                      .animate()
-                      .fadeIn(delay: 100.ms, duration: 400.ms)
-                      .slideY(begin: 0.2, end: 0),
-                  Text(
-                    slide.subtitle,
-                    style: TextStyle(
-                      fontSize: 44.sp,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                      letterSpacing: -1.5,
-                      height: 1.0,
-                    ),
-                  )
-                      .animate()
-                      .fadeIn(delay: 200.ms, duration: 400.ms)
-                      .slideY(begin: 0.2, end: 0),
-                  SizedBox(height: 20.h),
-                  Text(
-                    slide.description,
-                    style: TextStyle(
-                      fontSize: 16.sp,
-                      color: Colors.white.withOpacity(0.7),
-                      height: 1.6,
-                    ),
-                  )
-                      .animate()
-                      .fadeIn(delay: 350.ms, duration: 400.ms)
-                      .slideY(begin: 0.15, end: 0),
-                ],
-              ),
-            ),
-            SizedBox(height: 100.h),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Name input page (slide 2) ────────────────────────────────────────────────
-
-class _NamePage extends StatelessWidget {
-  final TextEditingController controller;
-  final VoidCallback onNext;
-  const _NamePage({required this.controller, required this.onNext});
-
-  @override
-  Widget build(BuildContext context) {
-    final slide = _slides[2];
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 32.w),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(height: 60.h),
-            Expanded(
-              flex: 4,
-              child: Center(
-                child: _Illustration(type: slide.illustration),
-              ),
-            ),
-            Expanded(
-              flex: 5,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    slide.title,
-                    style: TextStyle(
-                      fontSize: 28.sp,
-                      fontWeight: FontWeight.w300,
-                      color: Colors.white.withOpacity(0.75),
-                    ),
-                  ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
-                  Text(
-                    slide.subtitle,
-                    style: TextStyle(
-                      fontSize: 44.sp,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                      letterSpacing: -1.5,
-                      height: 1.0,
-                    ),
-                  ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
-                  SizedBox(height: 8.h),
-                  Text(
-                    slide.description,
-                    style: TextStyle(
-                      fontSize: 15.sp,
-                      color: Colors.white.withOpacity(0.65),
-                      height: 1.5,
-                    ),
-                  ).animate().fadeIn(delay: 300.ms, duration: 400.ms),
-                  SizedBox(height: 32.h),
-                  // Glass text field
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(18.r),
-                      border: Border.all(
-                          color: Colors.white.withOpacity(0.2), width: 1.5),
-                    ),
-                    child: TextField(
-                      controller: controller,
-                      autofocus: true,
-                      textCapitalization: TextCapitalization.words,
-                      style: TextStyle(
-                        fontSize: 18.sp,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                      cursorColor: Colors.white,
-                      decoration: InputDecoration(
-                        hintText: 'Your first name',
-                        hintStyle: TextStyle(
-                          color: Colors.white.withOpacity(0.4),
-                          fontSize: 18.sp,
-                        ),
-                        prefixIcon: Icon(Icons.person_rounded,
-                            color: Colors.white.withOpacity(0.5)),
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(
-                            horizontal: 20.w, vertical: 18.h),
-                      ),
-                      onSubmitted: (_) => onNext(),
-                    ),
-                  )
-                      .animate()
-                      .fadeIn(delay: 400.ms, duration: 400.ms)
-                      .slideY(begin: 0.1, end: 0),
-                  SizedBox(height: 24.h),
-                  // CTA button
-                  SizedBox(
-                    width: double.infinity,
-                    child: _GlassButton(
-                      label: 'Continue',
-                      icon: Icons.arrow_forward_rounded,
-                      onTap: onNext,
-                      isPrimary: true,
-                    ),
-                  ).animate().fadeIn(delay: 500.ms, duration: 400.ms),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Premium choice page (slide 3) ───────────────────────────────────────────
+// ─── Premium choice page (slide 0) ───────────────────────────────────────────
 
 class _PremiumChoicePage extends StatelessWidget {
   final bool isLoading;
@@ -727,7 +485,7 @@ class _FeatureCard extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
-                                isPremium ? 'Get Started →' : 'Continue Free →',
+                                isPremium ? 'Get Started ' : 'Continue Free ',
                                 style: TextStyle(
                                   fontSize: 15.sp,
                                   fontWeight: FontWeight.w700,
@@ -747,83 +505,6 @@ class _FeatureCard extends StatelessWidget {
   }
 }
 
-// ─── Bottom navigation bar ────────────────────────────────────────────────────
-
-class _BottomBar extends StatelessWidget {
-  final int currentPage;
-  final int totalPages;
-  final VoidCallback onNext;
-  const _BottomBar({
-    required this.currentPage,
-    required this.totalPages,
-    required this.onNext,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.only(
-        left: 32.w,
-        right: 32.w,
-        bottom: MediaQuery.of(context).padding.bottom + 24.h,
-        top: 20.h,
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // Page dots
-          Row(
-            children: List.generate(totalPages, (i) {
-              final active = i == currentPage;
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic,
-                width: active ? 28.w : 8.w,
-                height: 8.h,
-                margin: EdgeInsets.only(right: 6.w),
-                decoration: BoxDecoration(
-                  color: active ? Colors.white : Colors.white.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(4.r),
-                ),
-              );
-            }),
-          ),
-
-          // Next button
-          GestureDetector(
-            onTap: onNext,
-            child: Container(
-              width: 56.r,
-              height: 56.r,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Icon(
-                Icons.arrow_forward_rounded,
-                color: _slides[currentPage].gradient.first,
-                size: 24.sp,
-              ),
-            ).animate(onPlay: (c) => c.repeat(reverse: true)).scaleXY(
-                  begin: 1.0,
-                  end: 1.05,
-                  duration: 1200.ms,
-                  curve: Curves.easeInOut,
-                ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 // ─── Illustration widget ──────────────────────────────────────────────────────
 
 class _Illustration extends StatelessWidget {
@@ -833,204 +514,9 @@ class _Illustration extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return switch (type) {
-      _IllustrationType.tasks => _TasksIllustration(),
-      _IllustrationType.projects => _ProjectsIllustration(),
       _IllustrationType.name => _NameIllustration(),
       _IllustrationType.premium => _PremiumIllustration(),
     };
-  }
-}
-
-// Task checkmarks illustration
-class _TasksIllustration extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 280.w,
-      height: 260.h,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Glow
-          Container(
-            width: 200.r,
-            height: 200.r,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [
-                  Colors.white.withOpacity(0.15),
-                  Colors.transparent,
-                ],
-              ),
-            ),
-          ),
-          // Task cards
-          ..._taskCardData.asMap().entries.map((e) {
-            final idx = e.key;
-            final data = e.value;
-            return Positioned(
-              top: data.$1 * 1.h,
-              left: data.$2 * 1.w,
-              child: _TaskCard(
-                label: data.$3,
-                done: data.$4,
-                delay: (idx * 120).ms,
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  static const _taskCardData = [
-    (20.0, 20.0, 'Design system setup', true),
-    (80.0, 10.0, 'Write API docs', true),
-    (140.0, 30.0, 'Ship v1.0 today', false),
-    (190.0, 60.0, 'Review pull request', false),
-  ];
-}
-
-class _TaskCard extends StatelessWidget {
-  final String label;
-  final bool done;
-  final Duration delay;
-  const _TaskCard(
-      {required this.label, required this.done, required this.delay});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 210.w,
-      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 11.h),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(14.r),
-        border: Border.all(color: Colors.white.withOpacity(0.2)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 22.r,
-            height: 22.r,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: done ? Colors.white : Colors.transparent,
-              border: Border.all(
-                  color: Colors.white.withOpacity(done ? 0 : 0.4), width: 1.5),
-            ),
-            child: done
-                ? Icon(Icons.check_rounded,
-                    size: 14.sp, color: const Color(0xFF6366F1))
-                : null,
-          ),
-          SizedBox(width: 10.w),
-          Text(
-            label,
-            style: TextStyle(
-              color: done
-                  ? Colors.white.withOpacity(0.5)
-                  : Colors.white.withOpacity(0.9),
-              fontSize: 13.sp,
-              fontWeight: FontWeight.w500,
-              decoration: done ? TextDecoration.lineThrough : null,
-              decorationColor: Colors.white.withOpacity(0.5),
-            ),
-          ),
-        ],
-      ),
-    ).animate().fadeIn(delay: delay, duration: 400.ms).slideX(
-        begin: -0.1,
-        end: 0,
-        delay: delay,
-        duration: 400.ms,
-        curve: Curves.easeOut);
-  }
-}
-
-// Projects illustration
-class _ProjectsIllustration extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 280.w,
-      height: 260.h,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _ProjectFolder(
-                  label: 'Work', color: const Color(0xFF0EA5E9), delay: 0.ms),
-              SizedBox(width: 12.w),
-              _ProjectFolder(
-                  label: 'Personal',
-                  color: const Color(0xFF10B981),
-                  delay: 120.ms),
-            ],
-          ),
-          SizedBox(height: 12.h),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _ProjectFolder(
-                  label: 'Side\nProject',
-                  color: const Color(0xFFF59E0B),
-                  delay: 240.ms),
-              SizedBox(width: 12.w),
-              _ProjectFolder(
-                  label: 'Health',
-                  color: const Color(0xFFEF4444),
-                  delay: 360.ms),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ProjectFolder extends StatelessWidget {
-  final String label;
-  final Color color;
-  final Duration delay;
-  const _ProjectFolder(
-      {required this.label, required this.color, required this.delay});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 120.w,
-      height: 90.h,
-      padding: EdgeInsets.all(14.r),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(18.r),
-        border: Border.all(color: color.withOpacity(0.4), width: 1.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.folder_rounded, color: color, size: 28.sp),
-          const Spacer(),
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 13.sp,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    ).animate().fadeIn(delay: delay, duration: 400.ms).scale(
-        begin: const Offset(0.85, 0.85),
-        end: const Offset(1, 1),
-        delay: delay,
-        duration: 400.ms,
-        curve: Curves.easeOutBack);
   }
 }
 
