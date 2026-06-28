@@ -9,6 +9,7 @@ import '../../domain/usecases/delete_task.dart';
 import '../../domain/usecases/update_task.dart';
 import '../../../../core/utils/notification_manager.dart';
 import '../../../settings/presentation/controllers/settings_provider.dart';
+import '../../../../core/utils/streak_manager.dart';
 
 // Provider for the Drift Database instance
 final databaseProvider = Provider<AppDatabase>((ref) {
@@ -87,6 +88,8 @@ class TasksController extends Notifier<AsyncValue<void>> {
       if (updatedTask.isCompleted) {
         // Cancel notification on completion
         await NotificationManager.cancelNotification(updatedTask.id);
+        // Update daily streak
+        await StreakManager.updateStreak();
       } else {
         final notificationsEnabled = ref.read(settingsProvider).notificationsEnabled;
         // Reschedule reminder on uncomposing if due date is in the future

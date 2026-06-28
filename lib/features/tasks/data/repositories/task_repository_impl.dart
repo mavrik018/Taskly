@@ -18,6 +18,7 @@ class TaskRepositoryImpl implements TaskRepository {
       priority: entry.priority,
       projectId: entry.projectId,
       isCompleted: entry.isCompleted,
+      completedAt: entry.completedAt,
     );
   }
 
@@ -54,12 +55,25 @@ class TaskRepositoryImpl implements TaskRepository {
         priority: Value(priority),
         projectId: Value(projectId),
         isCompleted: const Value(false),
+        completedAt: const Value(null),
       ),
     );
   }
 
   @override
-  Future<bool> updateTask(Task task) {
+  Future<bool> updateTask(Task task) async {
+    final existing = await _taskDao.getTaskById(task.id);
+
+    // Auto-set completedAt when task is being marked as completed
+    // Clear it when un-completing a task
+    DateTime? resolvedCompletedAt;
+    if (task.isCompleted) {
+      // Preserve existing completedAt if already set, otherwise stamp now
+      resolvedCompletedAt = task.completedAt ?? existing?.completedAt ?? DateTime.now();
+    } else {
+      resolvedCompletedAt = null; // Clear when uncompleting
+    }
+
     return _taskDao.updateTask(
       TaskEntry(
         id: task.id,
@@ -69,6 +83,10 @@ class TaskRepositoryImpl implements TaskRepository {
         priority: task.priority,
         projectId: task.projectId,
         isCompleted: task.isCompleted,
+        completedAt: resolvedCompletedAt,
+        userId: existing?.userId,
+        isSynced: false,
+        isDeleted: existing?.isDeleted ?? false,
       ),
     );
   }

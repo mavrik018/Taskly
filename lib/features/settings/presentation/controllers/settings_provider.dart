@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/supabase_service.dart';
 
 class SettingsNotifier extends Notifier<SettingsState> {
   static const _notificationsKey = 'notifications_enabled';
@@ -39,6 +40,17 @@ class SettingsNotifier extends Notifier<SettingsState> {
   }
 
   Future<void> clearAllData(AppDatabase db) async {
+    final client = SupabaseService.client;
+    final user = SupabaseService.currentUser;
+
+    if (client != null && user != null) {
+      try {
+        await client.rpc('clear_user_data');
+      } catch (e) {
+        debugPrint('Failed to clear Supabase data via RPC: $e');
+      }
+    }
+
     await db.delete(db.tasks).go();
     await db.delete(db.projects).go();
   }

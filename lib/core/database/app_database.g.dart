@@ -41,8 +41,34 @@ class $ProjectsTable extends Projects
   late final GeneratedColumn<String> iconName = GeneratedColumn<String>(
       'icon_name', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
   @override
-  List<GeneratedColumn> get $columns => [id, name, colorHex, iconName];
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+      'user_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _isSyncedMeta =
+      const VerificationMeta('isSynced');
+  @override
+  late final GeneratedColumn<bool> isSynced = GeneratedColumn<bool>(
+      'is_synced', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_synced" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _isDeletedMeta =
+      const VerificationMeta('isDeleted');
+  @override
+  late final GeneratedColumn<bool> isDeleted = GeneratedColumn<bool>(
+      'is_deleted', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_deleted" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, name, colorHex, iconName, userId, isSynced, isDeleted];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -72,6 +98,18 @@ class $ProjectsTable extends Projects
       context.handle(_iconNameMeta,
           iconName.isAcceptableOrUnknown(data['icon_name']!, _iconNameMeta));
     }
+    if (data.containsKey('user_id')) {
+      context.handle(_userIdMeta,
+          userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta));
+    }
+    if (data.containsKey('is_synced')) {
+      context.handle(_isSyncedMeta,
+          isSynced.isAcceptableOrUnknown(data['is_synced']!, _isSyncedMeta));
+    }
+    if (data.containsKey('is_deleted')) {
+      context.handle(_isDeletedMeta,
+          isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta));
+    }
     return context;
   }
 
@@ -89,6 +127,12 @@ class $ProjectsTable extends Projects
           .read(DriftSqlType.string, data['${effectivePrefix}color_hex'])!,
       iconName: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}icon_name']),
+      userId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}user_id']),
+      isSynced: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_synced'])!,
+      isDeleted: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_deleted'])!,
     );
   }
 
@@ -103,11 +147,17 @@ class ProjectEntry extends DataClass implements Insertable<ProjectEntry> {
   final String name;
   final String colorHex;
   final String? iconName;
+  final String? userId;
+  final bool isSynced;
+  final bool isDeleted;
   const ProjectEntry(
       {required this.id,
       required this.name,
       required this.colorHex,
-      this.iconName});
+      this.iconName,
+      this.userId,
+      required this.isSynced,
+      required this.isDeleted});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -117,6 +167,11 @@ class ProjectEntry extends DataClass implements Insertable<ProjectEntry> {
     if (!nullToAbsent || iconName != null) {
       map['icon_name'] = Variable<String>(iconName);
     }
+    if (!nullToAbsent || userId != null) {
+      map['user_id'] = Variable<String>(userId);
+    }
+    map['is_synced'] = Variable<bool>(isSynced);
+    map['is_deleted'] = Variable<bool>(isDeleted);
     return map;
   }
 
@@ -128,6 +183,10 @@ class ProjectEntry extends DataClass implements Insertable<ProjectEntry> {
       iconName: iconName == null && nullToAbsent
           ? const Value.absent()
           : Value(iconName),
+      userId:
+          userId == null && nullToAbsent ? const Value.absent() : Value(userId),
+      isSynced: Value(isSynced),
+      isDeleted: Value(isDeleted),
     );
   }
 
@@ -139,6 +198,9 @@ class ProjectEntry extends DataClass implements Insertable<ProjectEntry> {
       name: serializer.fromJson<String>(json['name']),
       colorHex: serializer.fromJson<String>(json['colorHex']),
       iconName: serializer.fromJson<String?>(json['iconName']),
+      userId: serializer.fromJson<String?>(json['userId']),
+      isSynced: serializer.fromJson<bool>(json['isSynced']),
+      isDeleted: serializer.fromJson<bool>(json['isDeleted']),
     );
   }
   @override
@@ -149,6 +211,9 @@ class ProjectEntry extends DataClass implements Insertable<ProjectEntry> {
       'name': serializer.toJson<String>(name),
       'colorHex': serializer.toJson<String>(colorHex),
       'iconName': serializer.toJson<String?>(iconName),
+      'userId': serializer.toJson<String?>(userId),
+      'isSynced': serializer.toJson<bool>(isSynced),
+      'isDeleted': serializer.toJson<bool>(isDeleted),
     };
   }
 
@@ -156,12 +221,18 @@ class ProjectEntry extends DataClass implements Insertable<ProjectEntry> {
           {int? id,
           String? name,
           String? colorHex,
-          Value<String?> iconName = const Value.absent()}) =>
+          Value<String?> iconName = const Value.absent(),
+          Value<String?> userId = const Value.absent(),
+          bool? isSynced,
+          bool? isDeleted}) =>
       ProjectEntry(
         id: id ?? this.id,
         name: name ?? this.name,
         colorHex: colorHex ?? this.colorHex,
         iconName: iconName.present ? iconName.value : this.iconName,
+        userId: userId.present ? userId.value : this.userId,
+        isSynced: isSynced ?? this.isSynced,
+        isDeleted: isDeleted ?? this.isDeleted,
       );
   ProjectEntry copyWithCompanion(ProjectsCompanion data) {
     return ProjectEntry(
@@ -169,6 +240,9 @@ class ProjectEntry extends DataClass implements Insertable<ProjectEntry> {
       name: data.name.present ? data.name.value : this.name,
       colorHex: data.colorHex.present ? data.colorHex.value : this.colorHex,
       iconName: data.iconName.present ? data.iconName.value : this.iconName,
+      userId: data.userId.present ? data.userId.value : this.userId,
+      isSynced: data.isSynced.present ? data.isSynced.value : this.isSynced,
+      isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
     );
   }
 
@@ -178,13 +252,17 @@ class ProjectEntry extends DataClass implements Insertable<ProjectEntry> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('colorHex: $colorHex, ')
-          ..write('iconName: $iconName')
+          ..write('iconName: $iconName, ')
+          ..write('userId: $userId, ')
+          ..write('isSynced: $isSynced, ')
+          ..write('isDeleted: $isDeleted')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, name, colorHex, iconName);
+  int get hashCode =>
+      Object.hash(id, name, colorHex, iconName, userId, isSynced, isDeleted);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -192,7 +270,10 @@ class ProjectEntry extends DataClass implements Insertable<ProjectEntry> {
           other.id == this.id &&
           other.name == this.name &&
           other.colorHex == this.colorHex &&
-          other.iconName == this.iconName);
+          other.iconName == this.iconName &&
+          other.userId == this.userId &&
+          other.isSynced == this.isSynced &&
+          other.isDeleted == this.isDeleted);
 }
 
 class ProjectsCompanion extends UpdateCompanion<ProjectEntry> {
@@ -200,17 +281,26 @@ class ProjectsCompanion extends UpdateCompanion<ProjectEntry> {
   final Value<String> name;
   final Value<String> colorHex;
   final Value<String?> iconName;
+  final Value<String?> userId;
+  final Value<bool> isSynced;
+  final Value<bool> isDeleted;
   const ProjectsCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.colorHex = const Value.absent(),
     this.iconName = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.isSynced = const Value.absent(),
+    this.isDeleted = const Value.absent(),
   });
   ProjectsCompanion.insert({
     this.id = const Value.absent(),
     required String name,
     required String colorHex,
     this.iconName = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.isSynced = const Value.absent(),
+    this.isDeleted = const Value.absent(),
   })  : name = Value(name),
         colorHex = Value(colorHex);
   static Insertable<ProjectEntry> custom({
@@ -218,12 +308,18 @@ class ProjectsCompanion extends UpdateCompanion<ProjectEntry> {
     Expression<String>? name,
     Expression<String>? colorHex,
     Expression<String>? iconName,
+    Expression<String>? userId,
+    Expression<bool>? isSynced,
+    Expression<bool>? isDeleted,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (colorHex != null) 'color_hex': colorHex,
       if (iconName != null) 'icon_name': iconName,
+      if (userId != null) 'user_id': userId,
+      if (isSynced != null) 'is_synced': isSynced,
+      if (isDeleted != null) 'is_deleted': isDeleted,
     });
   }
 
@@ -231,12 +327,18 @@ class ProjectsCompanion extends UpdateCompanion<ProjectEntry> {
       {Value<int>? id,
       Value<String>? name,
       Value<String>? colorHex,
-      Value<String?>? iconName}) {
+      Value<String?>? iconName,
+      Value<String?>? userId,
+      Value<bool>? isSynced,
+      Value<bool>? isDeleted}) {
     return ProjectsCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
       colorHex: colorHex ?? this.colorHex,
       iconName: iconName ?? this.iconName,
+      userId: userId ?? this.userId,
+      isSynced: isSynced ?? this.isSynced,
+      isDeleted: isDeleted ?? this.isDeleted,
     );
   }
 
@@ -255,6 +357,15 @@ class ProjectsCompanion extends UpdateCompanion<ProjectEntry> {
     if (iconName.present) {
       map['icon_name'] = Variable<String>(iconName.value);
     }
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
+    }
+    if (isSynced.present) {
+      map['is_synced'] = Variable<bool>(isSynced.value);
+    }
+    if (isDeleted.present) {
+      map['is_deleted'] = Variable<bool>(isDeleted.value);
+    }
     return map;
   }
 
@@ -264,7 +375,10 @@ class ProjectsCompanion extends UpdateCompanion<ProjectEntry> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('colorHex: $colorHex, ')
-          ..write('iconName: $iconName')
+          ..write('iconName: $iconName, ')
+          ..write('userId: $userId, ')
+          ..write('isSynced: $isSynced, ')
+          ..write('isDeleted: $isDeleted')
           ..write(')'))
         .toString();
   }
@@ -331,9 +445,51 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskEntry> {
       defaultConstraints: GeneratedColumn.constraintIsAlways(
           'CHECK ("is_completed" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _completedAtMeta =
+      const VerificationMeta('completedAt');
   @override
-  List<GeneratedColumn> get $columns =>
-      [id, title, description, dueDate, priority, projectId, isCompleted];
+  late final GeneratedColumn<DateTime> completedAt = GeneratedColumn<DateTime>(
+      'completed_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+      'user_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _isSyncedMeta =
+      const VerificationMeta('isSynced');
+  @override
+  late final GeneratedColumn<bool> isSynced = GeneratedColumn<bool>(
+      'is_synced', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_synced" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _isDeletedMeta =
+      const VerificationMeta('isDeleted');
+  @override
+  late final GeneratedColumn<bool> isDeleted = GeneratedColumn<bool>(
+      'is_deleted', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_deleted" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        title,
+        description,
+        dueDate,
+        priority,
+        projectId,
+        isCompleted,
+        completedAt,
+        userId,
+        isSynced,
+        isDeleted
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -377,6 +533,24 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskEntry> {
           isCompleted.isAcceptableOrUnknown(
               data['is_completed']!, _isCompletedMeta));
     }
+    if (data.containsKey('completed_at')) {
+      context.handle(
+          _completedAtMeta,
+          completedAt.isAcceptableOrUnknown(
+              data['completed_at']!, _completedAtMeta));
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(_userIdMeta,
+          userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta));
+    }
+    if (data.containsKey('is_synced')) {
+      context.handle(_isSyncedMeta,
+          isSynced.isAcceptableOrUnknown(data['is_synced']!, _isSyncedMeta));
+    }
+    if (data.containsKey('is_deleted')) {
+      context.handle(_isDeletedMeta,
+          isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta));
+    }
     return context;
   }
 
@@ -400,6 +574,14 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskEntry> {
           .read(DriftSqlType.int, data['${effectivePrefix}project_id']),
       isCompleted: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_completed'])!,
+      completedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}completed_at']),
+      userId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}user_id']),
+      isSynced: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_synced'])!,
+      isDeleted: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_deleted'])!,
     );
   }
 
@@ -417,6 +599,10 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
   final int priority;
   final int? projectId;
   final bool isCompleted;
+  final DateTime? completedAt;
+  final String? userId;
+  final bool isSynced;
+  final bool isDeleted;
   const TaskEntry(
       {required this.id,
       required this.title,
@@ -424,7 +610,11 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
       this.dueDate,
       required this.priority,
       this.projectId,
-      required this.isCompleted});
+      required this.isCompleted,
+      this.completedAt,
+      this.userId,
+      required this.isSynced,
+      required this.isDeleted});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -441,6 +631,14 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
       map['project_id'] = Variable<int>(projectId);
     }
     map['is_completed'] = Variable<bool>(isCompleted);
+    if (!nullToAbsent || completedAt != null) {
+      map['completed_at'] = Variable<DateTime>(completedAt);
+    }
+    if (!nullToAbsent || userId != null) {
+      map['user_id'] = Variable<String>(userId);
+    }
+    map['is_synced'] = Variable<bool>(isSynced);
+    map['is_deleted'] = Variable<bool>(isDeleted);
     return map;
   }
 
@@ -459,6 +657,13 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
           ? const Value.absent()
           : Value(projectId),
       isCompleted: Value(isCompleted),
+      completedAt: completedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(completedAt),
+      userId:
+          userId == null && nullToAbsent ? const Value.absent() : Value(userId),
+      isSynced: Value(isSynced),
+      isDeleted: Value(isDeleted),
     );
   }
 
@@ -473,6 +678,10 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
       priority: serializer.fromJson<int>(json['priority']),
       projectId: serializer.fromJson<int?>(json['projectId']),
       isCompleted: serializer.fromJson<bool>(json['isCompleted']),
+      completedAt: serializer.fromJson<DateTime?>(json['completedAt']),
+      userId: serializer.fromJson<String?>(json['userId']),
+      isSynced: serializer.fromJson<bool>(json['isSynced']),
+      isDeleted: serializer.fromJson<bool>(json['isDeleted']),
     );
   }
   @override
@@ -486,6 +695,10 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
       'priority': serializer.toJson<int>(priority),
       'projectId': serializer.toJson<int?>(projectId),
       'isCompleted': serializer.toJson<bool>(isCompleted),
+      'completedAt': serializer.toJson<DateTime?>(completedAt),
+      'userId': serializer.toJson<String?>(userId),
+      'isSynced': serializer.toJson<bool>(isSynced),
+      'isDeleted': serializer.toJson<bool>(isDeleted),
     };
   }
 
@@ -496,7 +709,11 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
           Value<DateTime?> dueDate = const Value.absent(),
           int? priority,
           Value<int?> projectId = const Value.absent(),
-          bool? isCompleted}) =>
+          bool? isCompleted,
+          Value<DateTime?> completedAt = const Value.absent(),
+          Value<String?> userId = const Value.absent(),
+          bool? isSynced,
+          bool? isDeleted}) =>
       TaskEntry(
         id: id ?? this.id,
         title: title ?? this.title,
@@ -505,6 +722,10 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
         priority: priority ?? this.priority,
         projectId: projectId.present ? projectId.value : this.projectId,
         isCompleted: isCompleted ?? this.isCompleted,
+        completedAt: completedAt.present ? completedAt.value : this.completedAt,
+        userId: userId.present ? userId.value : this.userId,
+        isSynced: isSynced ?? this.isSynced,
+        isDeleted: isDeleted ?? this.isDeleted,
       );
   TaskEntry copyWithCompanion(TasksCompanion data) {
     return TaskEntry(
@@ -517,6 +738,11 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
       projectId: data.projectId.present ? data.projectId.value : this.projectId,
       isCompleted:
           data.isCompleted.present ? data.isCompleted.value : this.isCompleted,
+      completedAt:
+          data.completedAt.present ? data.completedAt.value : this.completedAt,
+      userId: data.userId.present ? data.userId.value : this.userId,
+      isSynced: data.isSynced.present ? data.isSynced.value : this.isSynced,
+      isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
     );
   }
 
@@ -529,14 +755,18 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
           ..write('dueDate: $dueDate, ')
           ..write('priority: $priority, ')
           ..write('projectId: $projectId, ')
-          ..write('isCompleted: $isCompleted')
+          ..write('isCompleted: $isCompleted, ')
+          ..write('completedAt: $completedAt, ')
+          ..write('userId: $userId, ')
+          ..write('isSynced: $isSynced, ')
+          ..write('isDeleted: $isDeleted')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
-      id, title, description, dueDate, priority, projectId, isCompleted);
+  int get hashCode => Object.hash(id, title, description, dueDate, priority,
+      projectId, isCompleted, completedAt, userId, isSynced, isDeleted);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -547,7 +777,11 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
           other.dueDate == this.dueDate &&
           other.priority == this.priority &&
           other.projectId == this.projectId &&
-          other.isCompleted == this.isCompleted);
+          other.isCompleted == this.isCompleted &&
+          other.completedAt == this.completedAt &&
+          other.userId == this.userId &&
+          other.isSynced == this.isSynced &&
+          other.isDeleted == this.isDeleted);
 }
 
 class TasksCompanion extends UpdateCompanion<TaskEntry> {
@@ -558,6 +792,10 @@ class TasksCompanion extends UpdateCompanion<TaskEntry> {
   final Value<int> priority;
   final Value<int?> projectId;
   final Value<bool> isCompleted;
+  final Value<DateTime?> completedAt;
+  final Value<String?> userId;
+  final Value<bool> isSynced;
+  final Value<bool> isDeleted;
   const TasksCompanion({
     this.id = const Value.absent(),
     this.title = const Value.absent(),
@@ -566,6 +804,10 @@ class TasksCompanion extends UpdateCompanion<TaskEntry> {
     this.priority = const Value.absent(),
     this.projectId = const Value.absent(),
     this.isCompleted = const Value.absent(),
+    this.completedAt = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.isSynced = const Value.absent(),
+    this.isDeleted = const Value.absent(),
   });
   TasksCompanion.insert({
     this.id = const Value.absent(),
@@ -575,6 +817,10 @@ class TasksCompanion extends UpdateCompanion<TaskEntry> {
     this.priority = const Value.absent(),
     this.projectId = const Value.absent(),
     this.isCompleted = const Value.absent(),
+    this.completedAt = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.isSynced = const Value.absent(),
+    this.isDeleted = const Value.absent(),
   }) : title = Value(title);
   static Insertable<TaskEntry> custom({
     Expression<int>? id,
@@ -584,6 +830,10 @@ class TasksCompanion extends UpdateCompanion<TaskEntry> {
     Expression<int>? priority,
     Expression<int>? projectId,
     Expression<bool>? isCompleted,
+    Expression<DateTime>? completedAt,
+    Expression<String>? userId,
+    Expression<bool>? isSynced,
+    Expression<bool>? isDeleted,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -593,6 +843,10 @@ class TasksCompanion extends UpdateCompanion<TaskEntry> {
       if (priority != null) 'priority': priority,
       if (projectId != null) 'project_id': projectId,
       if (isCompleted != null) 'is_completed': isCompleted,
+      if (completedAt != null) 'completed_at': completedAt,
+      if (userId != null) 'user_id': userId,
+      if (isSynced != null) 'is_synced': isSynced,
+      if (isDeleted != null) 'is_deleted': isDeleted,
     });
   }
 
@@ -603,7 +857,11 @@ class TasksCompanion extends UpdateCompanion<TaskEntry> {
       Value<DateTime?>? dueDate,
       Value<int>? priority,
       Value<int?>? projectId,
-      Value<bool>? isCompleted}) {
+      Value<bool>? isCompleted,
+      Value<DateTime?>? completedAt,
+      Value<String?>? userId,
+      Value<bool>? isSynced,
+      Value<bool>? isDeleted}) {
     return TasksCompanion(
       id: id ?? this.id,
       title: title ?? this.title,
@@ -612,6 +870,10 @@ class TasksCompanion extends UpdateCompanion<TaskEntry> {
       priority: priority ?? this.priority,
       projectId: projectId ?? this.projectId,
       isCompleted: isCompleted ?? this.isCompleted,
+      completedAt: completedAt ?? this.completedAt,
+      userId: userId ?? this.userId,
+      isSynced: isSynced ?? this.isSynced,
+      isDeleted: isDeleted ?? this.isDeleted,
     );
   }
 
@@ -639,6 +901,18 @@ class TasksCompanion extends UpdateCompanion<TaskEntry> {
     if (isCompleted.present) {
       map['is_completed'] = Variable<bool>(isCompleted.value);
     }
+    if (completedAt.present) {
+      map['completed_at'] = Variable<DateTime>(completedAt.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
+    }
+    if (isSynced.present) {
+      map['is_synced'] = Variable<bool>(isSynced.value);
+    }
+    if (isDeleted.present) {
+      map['is_deleted'] = Variable<bool>(isDeleted.value);
+    }
     return map;
   }
 
@@ -651,7 +925,11 @@ class TasksCompanion extends UpdateCompanion<TaskEntry> {
           ..write('dueDate: $dueDate, ')
           ..write('priority: $priority, ')
           ..write('projectId: $projectId, ')
-          ..write('isCompleted: $isCompleted')
+          ..write('isCompleted: $isCompleted, ')
+          ..write('completedAt: $completedAt, ')
+          ..write('userId: $userId, ')
+          ..write('isSynced: $isSynced, ')
+          ..write('isDeleted: $isDeleted')
           ..write(')'))
         .toString();
   }
@@ -686,12 +964,18 @@ typedef $$ProjectsTableCreateCompanionBuilder = ProjectsCompanion Function({
   required String name,
   required String colorHex,
   Value<String?> iconName,
+  Value<String?> userId,
+  Value<bool> isSynced,
+  Value<bool> isDeleted,
 });
 typedef $$ProjectsTableUpdateCompanionBuilder = ProjectsCompanion Function({
   Value<int> id,
   Value<String> name,
   Value<String> colorHex,
   Value<String?> iconName,
+  Value<String?> userId,
+  Value<bool> isSynced,
+  Value<bool> isDeleted,
 });
 
 final class $$ProjectsTableReferences
@@ -701,7 +985,7 @@ final class $$ProjectsTableReferences
   static MultiTypedResultKey<$TasksTable, List<TaskEntry>> _tasksRefsTable(
           _$AppDatabase db) =>
       MultiTypedResultKey.fromTable(db.tasks,
-          aliasName: $_aliasNameGenerator(db.projects.id, db.tasks.projectId));
+          aliasName: 'projects__id__tasks__project_id');
 
   $$TasksTableProcessedTableManager get tasksRefs {
     final manager = $$TasksTableTableManager($_db, $_db.tasks)
@@ -733,6 +1017,15 @@ class $$ProjectsTableFilterComposer
 
   ColumnFilters<String> get iconName => $composableBuilder(
       column: $table.iconName, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get userId => $composableBuilder(
+      column: $table.userId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get isSynced => $composableBuilder(
+      column: $table.isSynced, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get isDeleted => $composableBuilder(
+      column: $table.isDeleted, builder: (column) => ColumnFilters(column));
 
   Expression<bool> tasksRefs(
       Expression<bool> Function($$TasksTableFilterComposer f) f) {
@@ -776,6 +1069,15 @@ class $$ProjectsTableOrderingComposer
 
   ColumnOrderings<String> get iconName => $composableBuilder(
       column: $table.iconName, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get userId => $composableBuilder(
+      column: $table.userId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get isSynced => $composableBuilder(
+      column: $table.isSynced, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get isDeleted => $composableBuilder(
+      column: $table.isDeleted, builder: (column) => ColumnOrderings(column));
 }
 
 class $$ProjectsTableAnnotationComposer
@@ -798,6 +1100,15 @@ class $$ProjectsTableAnnotationComposer
 
   GeneratedColumn<String> get iconName =>
       $composableBuilder(column: $table.iconName, builder: (column) => column);
+
+  GeneratedColumn<String> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<bool> get isSynced =>
+      $composableBuilder(column: $table.isSynced, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDeleted =>
+      $composableBuilder(column: $table.isDeleted, builder: (column) => column);
 
   Expression<T> tasksRefs<T extends Object>(
       Expression<T> Function($$TasksTableAnnotationComposer a) f) {
@@ -848,24 +1159,36 @@ class $$ProjectsTableTableManager extends RootTableManager<
             Value<String> name = const Value.absent(),
             Value<String> colorHex = const Value.absent(),
             Value<String?> iconName = const Value.absent(),
+            Value<String?> userId = const Value.absent(),
+            Value<bool> isSynced = const Value.absent(),
+            Value<bool> isDeleted = const Value.absent(),
           }) =>
               ProjectsCompanion(
             id: id,
             name: name,
             colorHex: colorHex,
             iconName: iconName,
+            userId: userId,
+            isSynced: isSynced,
+            isDeleted: isDeleted,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
             required String name,
             required String colorHex,
             Value<String?> iconName = const Value.absent(),
+            Value<String?> userId = const Value.absent(),
+            Value<bool> isSynced = const Value.absent(),
+            Value<bool> isDeleted = const Value.absent(),
           }) =>
               ProjectsCompanion.insert(
             id: id,
             name: name,
             colorHex: colorHex,
             iconName: iconName,
+            userId: userId,
+            isSynced: isSynced,
+            isDeleted: isDeleted,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) =>
@@ -917,6 +1240,10 @@ typedef $$TasksTableCreateCompanionBuilder = TasksCompanion Function({
   Value<int> priority,
   Value<int?> projectId,
   Value<bool> isCompleted,
+  Value<DateTime?> completedAt,
+  Value<String?> userId,
+  Value<bool> isSynced,
+  Value<bool> isDeleted,
 });
 typedef $$TasksTableUpdateCompanionBuilder = TasksCompanion Function({
   Value<int> id,
@@ -926,14 +1253,18 @@ typedef $$TasksTableUpdateCompanionBuilder = TasksCompanion Function({
   Value<int> priority,
   Value<int?> projectId,
   Value<bool> isCompleted,
+  Value<DateTime?> completedAt,
+  Value<String?> userId,
+  Value<bool> isSynced,
+  Value<bool> isDeleted,
 });
 
 final class $$TasksTableReferences
     extends BaseReferences<_$AppDatabase, $TasksTable, TaskEntry> {
   $$TasksTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $ProjectsTable _projectIdTable(_$AppDatabase db) => db.projects
-      .createAlias($_aliasNameGenerator(db.tasks.projectId, db.projects.id));
+  static $ProjectsTable _projectIdTable(_$AppDatabase db) =>
+      db.projects.createAlias('tasks__project_id__projects__id');
 
   $$ProjectsTableProcessedTableManager? get projectId {
     final $_column = $_itemColumn<int>('project_id');
@@ -972,6 +1303,18 @@ class $$TasksTableFilterComposer extends Composer<_$AppDatabase, $TasksTable> {
 
   ColumnFilters<bool> get isCompleted => $composableBuilder(
       column: $table.isCompleted, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get completedAt => $composableBuilder(
+      column: $table.completedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get userId => $composableBuilder(
+      column: $table.userId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get isSynced => $composableBuilder(
+      column: $table.isSynced, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get isDeleted => $composableBuilder(
+      column: $table.isDeleted, builder: (column) => ColumnFilters(column));
 
   $$ProjectsTableFilterComposer get projectId {
     final $$ProjectsTableFilterComposer composer = $composerBuilder(
@@ -1021,6 +1364,18 @@ class $$TasksTableOrderingComposer
   ColumnOrderings<bool> get isCompleted => $composableBuilder(
       column: $table.isCompleted, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<DateTime> get completedAt => $composableBuilder(
+      column: $table.completedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get userId => $composableBuilder(
+      column: $table.userId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get isSynced => $composableBuilder(
+      column: $table.isSynced, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get isDeleted => $composableBuilder(
+      column: $table.isDeleted, builder: (column) => ColumnOrderings(column));
+
   $$ProjectsTableOrderingComposer get projectId {
     final $$ProjectsTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -1068,6 +1423,18 @@ class $$TasksTableAnnotationComposer
 
   GeneratedColumn<bool> get isCompleted => $composableBuilder(
       column: $table.isCompleted, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get completedAt => $composableBuilder(
+      column: $table.completedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<bool> get isSynced =>
+      $composableBuilder(column: $table.isSynced, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDeleted =>
+      $composableBuilder(column: $table.isDeleted, builder: (column) => column);
 
   $$ProjectsTableAnnotationComposer get projectId {
     final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
@@ -1120,6 +1487,10 @@ class $$TasksTableTableManager extends RootTableManager<
             Value<int> priority = const Value.absent(),
             Value<int?> projectId = const Value.absent(),
             Value<bool> isCompleted = const Value.absent(),
+            Value<DateTime?> completedAt = const Value.absent(),
+            Value<String?> userId = const Value.absent(),
+            Value<bool> isSynced = const Value.absent(),
+            Value<bool> isDeleted = const Value.absent(),
           }) =>
               TasksCompanion(
             id: id,
@@ -1129,6 +1500,10 @@ class $$TasksTableTableManager extends RootTableManager<
             priority: priority,
             projectId: projectId,
             isCompleted: isCompleted,
+            completedAt: completedAt,
+            userId: userId,
+            isSynced: isSynced,
+            isDeleted: isDeleted,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -1138,6 +1513,10 @@ class $$TasksTableTableManager extends RootTableManager<
             Value<int> priority = const Value.absent(),
             Value<int?> projectId = const Value.absent(),
             Value<bool> isCompleted = const Value.absent(),
+            Value<DateTime?> completedAt = const Value.absent(),
+            Value<String?> userId = const Value.absent(),
+            Value<bool> isSynced = const Value.absent(),
+            Value<bool> isDeleted = const Value.absent(),
           }) =>
               TasksCompanion.insert(
             id: id,
@@ -1147,6 +1526,10 @@ class $$TasksTableTableManager extends RootTableManager<
             priority: priority,
             projectId: projectId,
             isCompleted: isCompleted,
+            completedAt: completedAt,
+            userId: userId,
+            isSynced: isSynced,
+            isDeleted: isDeleted,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) =>

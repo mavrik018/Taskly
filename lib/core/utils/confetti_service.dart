@@ -207,66 +207,6 @@ class _ConfettiOverlayWidgetState extends State<_ConfettiOverlayWidget>
               ),
             ),
           ),
-          // Celebratory Text Card in Center
-          Align(
-            alignment: Alignment.center,
-            child: IgnorePointer(
-              child: Card(
-                elevation: 12,
-                shadowColor: Colors.black.withOpacity(0.3),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                color: Colors.white.withOpacity(0.95),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 32,
-                    vertical: 24,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '🎉 Milestone! 🎉',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '${widget.milestoneCount} Tasks Completed',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Keep up the amazing momentum!',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.black54,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-                  .animate()
-                  .scale(
-                    duration: 400.ms,
-                    curve: Curves.elasticOut,
-                    begin: const Offset(0.4, 0.4),
-                  )
-                  .fadeIn(duration: 250.ms)
-                  .then(delay: 2.2.seconds)
-                  .fadeOut(duration: 500.ms)
-                  .scale(begin: const Offset(1, 1), end: const Offset(0.7, 0.7)),
-            ),
-          ),
         ],
       ),
     );

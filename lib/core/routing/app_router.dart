@@ -8,6 +8,9 @@ import '../../features/onboarding/presentation/screens/onboarding_screen.dart';
 import '../../features/search/presentation/screens/search_screen.dart';
 import '../../features/onboarding/presentation/controllers/onboarding_provider.dart';
 import '../../shared/widgets/app_shell.dart';
+import '../../features/stats/presentation/screens/stats_screen.dart';
+import '../../features/stats/presentation/screens/weekly_review_screen.dart';
+import '../../features/auth/presentation/screens/auth_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   // Watch the onboarding state to trigger router redirects reactively
@@ -36,6 +39,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.onboarding,
         builder: (context, state) => const OnboardingScreen(),
       ),
+      GoRoute(
+        path: AppRoutes.weeklyReview,
+        builder: (context, state) => const WeeklyReviewScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.auth,
+        builder: (context, state) => const AuthScreen(),
+      ),
       // App Navigation Shell
       ShellRoute(
         builder: (context, state, child) {
@@ -53,6 +64,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/projects',
             builder: (context, state) => const ProjectsScreen(),
+          ),
+          GoRoute(
+            path: AppRoutes.stats,
+            builder: (context, state) => const StatsScreen(),
           ),
           GoRoute(
             path: AppRoutes.settings,

@@ -9,6 +9,10 @@ import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../controllers/settings_provider.dart';
 import '../../../tasks/presentation/controllers/tasks_provider.dart';
+import 'package:go_router/go_router.dart';
+import '../../../../core/routing/app_routes.dart';
+import '../../../auth/presentation/controllers/auth_provider.dart';
+import '../../../../core/services/ai_service.dart';
 import '../../../../core/utils/notification_manager.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -17,10 +21,12 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final isDarkMode = ref.watch(themeModeProvider);
     final settingsState = ref.watch(settingsProvider);
     final db = ref.watch(databaseProvider);
     final onboardingState = ref.watch(onboardingProvider);
+    final currentUser = ref.watch(authProvider);
     final userName = onboardingState.value?.userName ?? 'Productivity Champ';
 
     return Scaffold(
@@ -41,7 +47,7 @@ class SettingsScreen extends ConsumerWidget {
                       width: 48.w,
                       height: 48.h,
                       decoration: BoxDecoration(
-                        color: AppColors.primary,
+                        color: isDark ? Colors.white : Colors.black,
                         borderRadius: BorderRadius.circular(16.r),
                       ),
                       child: Center(
@@ -50,7 +56,7 @@ class SettingsScreen extends ConsumerWidget {
                               ? userName.substring(0, 1).toUpperCase()
                               : 'U',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: isDark ? Colors.black : Colors.white,
                             fontSize: 18.sp,
                             fontWeight: FontWeight.bold,
                           ),
@@ -115,7 +121,7 @@ class SettingsScreen extends ConsumerWidget {
                 ),
               ),
             ),
-            SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.lg),
 
             // General Section
             Text(
@@ -168,12 +174,124 @@ class SettingsScreen extends ConsumerWidget {
                 ],
               ),
             ),
-            SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.lg),
 
-            /*
-            // Account Section
+            // Account & Sync Section
             Text(
-              'ACCOUNT',
+              'ACCOUNT & SYNC',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.secondary,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
+              ),
+            ),
+            SizedBox(height: AppSpacing.sm),
+            Card(
+              child: Column(
+                children: [
+                  if (currentUser != null) ...[
+                    _buildSettingItem(
+                      context: context,
+                      icon: Icons.account_circle_outlined,
+                      title: currentUser.email ?? 'Signed In',
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 9, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white : Colors.black,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'PREMIUM',
+                          style: TextStyle(
+                            color: isDark ? Colors.black : Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 10.sp,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Divider(height: 1, indent: 56.w),
+                    _buildSettingItem(
+                      context: context,
+                      icon: Icons.sync_rounded,
+                      title: 'Sync Database',
+                      trailing: TextButton(
+                        onPressed: () async {
+                          HapticFeedback.lightImpact();
+                          await ref.read(syncServiceProvider).sync();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Database synced!')),
+                            );
+                          }
+                        },
+                        child: Text(
+                          'Sync Now',
+                          style: TextStyle(
+                            decoration: TextDecoration.underline,
+                            decorationColor: theme.colorScheme.secondary
+                                .withValues(alpha: 0.5),
+                            color: theme.textTheme.bodyLarge?.color,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Divider(height: 1, indent: 56.w),
+                    _buildSettingItem(
+                      context: context,
+                      icon: Icons.logout_rounded,
+                      title: 'Sign Out',
+                      trailing: Icon(Icons.chevron_right,
+                          color: theme.colorScheme.secondary),
+                      onTap: () async {
+                        HapticFeedback.mediumImpact();
+                        await ref.read(authProvider.notifier).signOut();
+                      },
+                    ),
+                  ] else ...[
+                    _buildSettingItem(
+                      context: context,
+                      icon: Icons.cloud_off_rounded,
+                      title: 'Cloud Backup & Sync',
+                      trailing: Switch(
+                        value: false,
+                        onChanged: (value) {
+                          HapticFeedback.lightImpact();
+                          showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Enable Cloud Backup?'),
+                              content: const Text(
+                                  'To enable cloud backup and synchronize your tasks across devices, please sign in or register for a premium account.'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    context.push(AppRoutes.auth);
+                                  },
+                                  child: const Text('Sign In / Sign Up'),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            SizedBox(height: AppSpacing.lg),
+
+            // AI Preferences Section
+            Text(
+              'AI PREFERENCES',
               style: theme.textTheme.labelMedium?.copyWith(
                 color: theme.colorScheme.secondary,
                 fontWeight: FontWeight.w600,
@@ -186,158 +304,84 @@ class SettingsScreen extends ConsumerWidget {
                 children: [
                   _buildSettingItem(
                     context: context,
-                    icon: Icons.person_outline,
-                    title: 'Personal Information',
+                    icon: Icons.emoji_events_outlined,
+                    title: 'Weekly Performance Wrap',
                     trailing: Icon(Icons.chevron_right,
                         color: theme.colorScheme.secondary),
                     onTap: () {
                       HapticFeedback.lightImpact();
-                      showDialog(
-                        context: context,
-                        builder: (context) {
-                          final controller =
-                              TextEditingController(text: userName);
-                          return AlertDialog(
-                            title: const Text('Edit Name'),
-                            content: TextField(
-                              controller: controller,
-                              decoration:
-                                  const InputDecoration(labelText: 'Name'),
-                            ),
+                      if (currentUser == null) {
+                        showDialog(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('Premium Feature'),
+                            content: const Text(
+                                'AI Weekly Performance Wrap is a premium feature. Please sign in or register to unlock weekly summaries.'),
                             actions: [
                               TextButton(
                                 onPressed: () => Navigator.pop(context),
                                 child: const Text('Cancel'),
                               ),
                               TextButton(
-                                onPressed: () async {
-                                  if (controller.text.trim().isNotEmpty) {
-                                    await ref
-                                        .read(onboardingProvider.notifier)
-                                        .updateUserName(controller.text.trim());
-                                    if (context.mounted) Navigator.pop(context);
-                                  }
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  context.push(AppRoutes.auth);
                                 },
-                                child: const Text('Save'),
+                                child: const Text('Upgrade'),
                               ),
                             ],
-                          );
-                        },
-                      );
+                          ),
+                        );
+                        return;
+                      }
+                      context.push(AppRoutes.weeklyReview);
                     },
                   ),
-                  // Divider(height: 1, indent: 56.w),
-                  // _buildSettingItem(
-                  //   context: context,
-                  //   icon: Icons.subscriptions_outlined,
-                  //   title: 'Subscription',
-                  //   trailing: Row(
-                  //     mainAxisSize: MainAxisSize.min,
-                  //     children: [
-                  //       Container(
-                  //         padding: EdgeInsets.symmetric(
-                  //             horizontal: 8.w, vertical: 4.h),
-                  //         decoration: BoxDecoration(
-                  //           color: AppColors.primary,
-                  //           borderRadius: BorderRadius.circular(6.r),
-                  //         ),
-                  //         child: Text(
-                  //           settingsState.subscriptionTier,
-                  //           style: TextStyle(
-                  //             color: Colors.white,
-                  //             fontSize: 10.sp,
-                  //             fontWeight: FontWeight.bold,
-                  //           ),
-                  //         ),
-                  //       ),
-                  //       SizedBox(width: 4.w),
-                  //       Icon(Icons.chevron_right,
-                  //           color: theme.colorScheme.secondary),
-                  //     ],
-                  //   ),
-                  //   onTap: () {
-                  //     HapticFeedback.lightImpact();
-                  //     showDialog(
-                  //       context: context,
-                  //       builder: (context) {
-                  //         return AlertDialog(
-                  //           title: const Text('Subscription Plan'),
-                  //           content: Column(
-                  //             mainAxisSize: MainAxisSize.min,
-                  //             children: [
-                  //               ListTile(
-                  //                 title: const Text('FREE Plan'),
-                  //                 subtitle: const Text(
-                  //                     'Standard access, up to 5 projects'),
-                  //                 leading: Radio<String>(
-                  //                   value: 'FREE',
-                  //                   groupValue: settingsState.subscriptionTier,
-                  //                   onChanged: (value) async {
-                  //                     if (value != null) {
-                      //                       await ref
-                      //                           .read(settingsProvider.notifier)
-                      //                           .setSubscriptionTier(value);
-                      //                       if (context.mounted)
-                      //                         Navigator.pop(context);
-                      //                     }
-                      //                   },
-                      //                 ),
-                      //               ),
-                      //               ListTile(
-                      //                 title: const Text('PRO Plan'),
-                      //                 subtitle: const Text(
-                      //                     'Unlimited projects & priority support'),
-                      //                 leading: Radio<String>(
-                      //                   value: 'PRO',
-                      //                   groupValue: settingsState.subscriptionTier,
-                      //                   onChanged: (value) async {
-                      //                     if (value != null) {
-                      //                       await ref
-                      //                           .read(settingsProvider.notifier)
-                      //                           .setSubscriptionTier(value);
-                      //                       if (context.mounted)
-                      //                         Navigator.pop(context);
-                      //                     }
-                      //                   },
-                      //                 ),
-                      //               ),
-                      //             ],
-                      //           ),
-                      //         );
-                      //       },
-                      //     );
-                      //   },
-                      // ),
-                    ],
-                  ),
-                ),
-                SizedBox(height: AppSpacing.md),
-                */
+                ],
+              ),
+            ),
+            SizedBox(height: AppSpacing.lg),
 
-            // Clear All Data
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.priorityHigh,
-                  foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(vertical: 14.h),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: AppRadius.borderLG,
-                  ),
+            // Data Section — destructive action demoted to a row, not a full-width CTA
+            Text(
+              'DATA',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.secondary,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
+              ),
+            ),
+            SizedBox(height: AppSpacing.sm),
+            Card(
+              shape: RoundedRectangleBorder(
+                borderRadius: AppRadius.borderLG,
+                side: BorderSide(
+                  color: AppColors.priorityHigh.withValues(alpha: 0.3),
+                  width: 0.5,
                 ),
-                onPressed: () async {
+              ),
+              child: _buildSettingItem(
+                context: context,
+                icon: Icons.delete_outline_rounded,
+                iconColor: AppColors.priorityHigh,
+                title: 'Clear All Data',
+                titleColor: AppColors.priorityHigh,
+                trailing: Icon(
+                  Icons.chevron_right,
+                  color: AppColors.priorityHigh.withValues(alpha: 0.6),
+                ),
+                onTap: () async {
                   HapticFeedback.heavyImpact();
                   final confirmed = await showDialog<bool>(
                     context: context,
                     builder: (context) => AlertDialog(
-                      title: Text('Clear All Data?'),
-                      content: Text(
+                      title: const Text('Clear All Data?'),
+                      content: const Text(
                           'This action is irreversible. All tasks and projects will be deleted.'),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.of(context).pop(false),
-                          child: Text('Cancel'),
+                          child: const Text('Cancel'),
                         ),
                         TextButton(
                           onPressed: () => Navigator.of(context).pop(true),
@@ -356,13 +400,6 @@ class SettingsScreen extends ConsumerWidget {
                     }
                   }
                 },
-                child: Text(
-                  'Clear All Data',
-                  style: TextStyle(
-                    fontSize: 16.sp,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
               ),
             ),
             SizedBox(height: AppSpacing.lg),
@@ -387,6 +424,8 @@ class SettingsScreen extends ConsumerWidget {
     required IconData icon,
     required String title,
     required Widget trailing,
+    Color? iconColor,
+    Color? titleColor,
     VoidCallback? onTap,
   }) {
     final theme = Theme.of(context);
@@ -402,7 +441,7 @@ class SettingsScreen extends ConsumerWidget {
           children: [
             Icon(
               icon,
-              color: theme.colorScheme.onSurface.withOpacity(0.8),
+              color: iconColor ?? theme.colorScheme.onSurface.withOpacity(0.8),
               size: 24.sp,
             ),
             SizedBox(width: AppSpacing.md),
@@ -411,6 +450,7 @@ class SettingsScreen extends ConsumerWidget {
                 title,
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w500,
+                  color: titleColor,
                 ),
               ),
             ),

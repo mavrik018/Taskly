@@ -14,7 +14,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration {
@@ -22,6 +22,8 @@ class AppDatabase extends _$AppDatabase {
       beforeOpen: (details) async {
         // Enforce foreign keys
         await customStatement('PRAGMA foreign_keys = ON');
+        // Clean up temporary/placeholder test tasks
+        await customStatement("DELETE FROM tasks WHERE title = 'Smsmkdasndmas' OR title LIKE 'Smsmk%'");
       },
       onUpgrade: (m, from, to) async {
         if (from < 2) {
@@ -30,6 +32,19 @@ class AppDatabase extends _$AppDatabase {
             await m.deleteTable(table.aliasedName);
             await m.createTable(table);
           }
+        }
+        if (from < 3) {
+          // Add sync columns to tasks and projects
+          await m.addColumn(tasks, tasks.userId);
+          await m.addColumn(tasks, tasks.isSynced);
+          await m.addColumn(tasks, tasks.isDeleted);
+          await m.addColumn(projects, projects.userId);
+          await m.addColumn(projects, projects.isSynced);
+          await m.addColumn(projects, projects.isDeleted);
+        }
+        if (from < 4) {
+          // Add completedAt timestamp column
+          await m.addColumn(tasks, tasks.completedAt);
         }
       },
     );

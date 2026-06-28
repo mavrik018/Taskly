@@ -6,6 +6,7 @@ import '../../domain/entities/project.dart';
 import '../../domain/repositories/project_repository.dart';
 import '../../domain/usecases/create_project.dart';
 import '../../domain/usecases/delete_project.dart';
+import '../../../../core/utils/error_mapper.dart';
 
 // ─── Repository Provider ────────────────────────────────────────────────────
 
@@ -69,7 +70,7 @@ class ProjectsController extends Notifier<ProjectsState> {
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: 'Failed to create project: $e',
+        errorMessage: ErrorMapper.getProjectErrorMessage(e),
       );
     }
   }
@@ -83,7 +84,7 @@ class ProjectsController extends Notifier<ProjectsState> {
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: 'Failed to delete project: $e',
+        errorMessage: ErrorMapper.getProjectErrorMessage(e),
       );
     }
   }

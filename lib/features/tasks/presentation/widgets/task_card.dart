@@ -12,6 +12,8 @@ class TaskCard extends StatelessWidget {
   final VoidCallback onToggle;
   final VoidCallback onDelete;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+  final bool isSuggested;
 
   const TaskCard({
     super.key,
@@ -19,6 +21,8 @@ class TaskCard extends StatelessWidget {
     required this.onToggle,
     required this.onDelete,
     required this.onTap,
+    this.onLongPress,
+    this.isSuggested = false,
   });
 
   @override
@@ -41,6 +45,7 @@ class TaskCard extends StatelessWidget {
         ),
         child: GestureDetector(
           onTap: onTap,
+          onLongPress: onLongPress,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 250),
             curve: Curves.easeOut,
@@ -89,16 +94,36 @@ class TaskCard extends StatelessWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // Priority Label
-                                if (hasPriority && !task.isCompleted) ...[
-                                  Text(
-                                    _getPriorityLabel(task.priority),
-                                    style:
-                                        theme.textTheme.labelMedium?.copyWith(
-                                      color: priorityColor,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 12.sp,
-                                    ),
+                                // Priority / Suggested Label
+                                if ((hasPriority || isSuggested) && !task.isCompleted) ...[
+                                  Row(
+                                    children: [
+                                      if (hasPriority)
+                                        Text(
+                                          _getPriorityLabel(task.priority),
+                                          style:
+                                              theme.textTheme.labelMedium?.copyWith(
+                                            color: priorityColor,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 12.sp,
+                                          ),
+                                        ),
+                                      if (hasPriority && isSuggested)
+                                        const SizedBox(width: 8),
+                                      if (isSuggested)
+                                        Text(
+                                          '✦ SUGGESTED',
+                                          style:
+                                              theme.textTheme.labelMedium?.copyWith(
+                                            color: isDark
+                                                ? Colors.white60
+                                                : Colors.black45,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 10.sp,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                    ],
                                   ),
                                   SizedBox(height: 4.sp),
                                 ],

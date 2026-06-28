@@ -8,12 +8,12 @@ class ThemeModeNotifier extends Notifier<bool> {
   @override
   bool build() {
     _loadTheme();
-    return false;
+    return true;
   }
 
   Future<void> _loadTheme() async {
     final prefs = await SharedPreferences.getInstance();
-    state = prefs.getBool(_key) ?? false;
+    state = prefs.getBool(_key) ?? true;
   }
 
   Future<void> toggleTheme() async {

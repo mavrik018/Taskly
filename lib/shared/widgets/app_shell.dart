@@ -31,11 +31,14 @@ class _AppShellState extends ConsumerState<AppShell> {
     if (location.startsWith('/projects')) {
       return 1;
     }
-    if (location.startsWith('/search')) {
+    if (location.startsWith('/stats')) {
       return 2;
     }
-    if (location.startsWith('/settings')) {
+    if (location.startsWith('/search')) {
       return 3;
+    }
+    if (location.startsWith('/settings')) {
+      return 4;
     }
     return 0;
   }
@@ -49,9 +52,12 @@ class _AppShellState extends ConsumerState<AppShell> {
         context.go('/projects');
         break;
       case 2:
-        context.go('/search');
+        context.go('/stats');
         break;
       case 3:
+        context.go('/search');
+        break;
+      case 4:
         context.go('/settings');
         break;
     }
@@ -109,10 +115,18 @@ class _AppShellState extends ConsumerState<AppShell> {
                 ),
                 _buildNavItem(
                   context: context,
+                  icon: Icons.bar_chart_rounded,
+                  activeIcon: Icons.bar_chart_rounded,
+                  label: 'Stats',
+                  index: 2,
+                  selectedIndex: selectedIndex,
+                ),
+                _buildNavItem(
+                  context: context,
                   icon: Icons.search_rounded,
                   activeIcon: Icons.search_rounded,
                   label: 'Search',
-                  index: 2,
+                  index: 3,
                   selectedIndex: selectedIndex,
                 ),
                 _buildNavItem(
@@ -120,7 +134,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                   icon: Icons.settings_outlined,
                   activeIcon: Icons.settings_rounded,
                   label: 'Settings',
-                  index: 3,
+                  index: 4,
                   selectedIndex: selectedIndex,
                 ),
               ],

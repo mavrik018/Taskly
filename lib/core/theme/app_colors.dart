@@ -22,9 +22,9 @@ class AppColors {
   static const Color darkTextSecondary = Color(0xFFA1A1AA);
   static const Color darkBorder = Color(0xFF27272A);
 
-  // Priority level colors (Harmonious semantic HSL matched)
-  static const Color priorityHigh = Color(0xFFEF4444);    // High (🔴)
-  static const Color priorityMedium = Color(0xFFF59E0B);  // Medium (🟡)
-  static const Color priorityLow = Color(0xFF10B981);     // Low (🟢)
+  // Priority level colors (Harmonious semantic HSL matched with high contrast)
+  static const Color priorityHigh = Color(0xFFE11D48);    // High (Rose-Red)
+  static const Color priorityMedium = Color(0xFFD97706);  // Medium (Amber)
+  static const Color priorityLow = Color(0xFF059669);     // Low (Emerald)
   static const Color priorityNone = Color(0xFF71717A);    // Neutral/No Label
 }
