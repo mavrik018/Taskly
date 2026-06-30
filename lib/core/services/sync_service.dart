@@ -2,15 +2,18 @@ import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:drift/drift.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/app_database.dart';
 import 'supabase_service.dart';
+import 'profile_sync_service.dart';
 
 class SyncService {
   final AppDatabase _db;
+  final Ref _ref;
   StreamSubscription? _connectivitySubscription;
   bool _isSyncing = false;
 
-  SyncService(this._db) {
+  SyncService(this._db, this._ref) {
     _initConnectivityListener();
   }
 
@@ -43,6 +46,9 @@ class SyncService {
 
     try {
       debugPrint('Sync: Starting synchronization process...');
+
+      // Sync settings & profiles first
+      await ProfileSyncService.syncAll(_ref);
 
       // 1. Push deleted projects
       final deletedProjectsList = await (_db.select(_db.projects)

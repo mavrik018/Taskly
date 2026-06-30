@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/supabase_service.dart';
+import '../../../../core/services/profile_sync_service.dart';
 
 class SettingsNotifier extends Notifier<SettingsState> {
   static const _notificationsKey = 'notifications_enabled';
@@ -31,12 +32,22 @@ class SettingsNotifier extends Notifier<SettingsState> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_notificationsKey, enabled);
     state = state.copyWith(notificationsEnabled: enabled);
+    try {
+      await ProfileSyncService.pushLocalProfileToCloud();
+    } catch (_) {}
+  }
+
+  void setNotificationsEnabled(bool enabled) {
+    state = state.copyWith(notificationsEnabled: enabled);
   }
 
   Future<void> setSubscriptionTier(String tier) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_subscriptionKey, tier);
     state = state.copyWith(subscriptionTier: tier);
+    try {
+      await ProfileSyncService.pushLocalProfileToCloud();
+    } catch (_) {}
   }
 
   Future<void> clearAllData(AppDatabase db) async {

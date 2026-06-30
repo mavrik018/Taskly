@@ -10,6 +10,7 @@ import '../controllers/tasks_provider.dart';
 import '../../../../core/services/ai_service.dart';
 import '../../../../core/utils/error_mapper.dart';
 import '../../../../shared/widgets/premium_promo_dialog.dart';
+import '../../../../shared/widgets/ai_snackbar.dart';
 
 class TaskBreakdownSheet extends ConsumerStatefulWidget {
   final Task task;
@@ -39,13 +40,21 @@ class _TaskBreakdownSheetState extends ConsumerState<TaskBreakdownSheet> {
     });
 
     try {
-      final list = await AIService.breakDownTask(widget.task.title);
+      final list = await AIService.breakDownTask(widget.task.id.toString(), widget.task.title);
       if (mounted) {
         setState(() {
           _subtasks = list;
           _checked.assignAll(List.generate(list.length, (index) => true));
           _loading = false;
         });
+        final remaining = await AIService.getRemainingLimit('breakdown', 7);
+        AISnackBar.showUsage(
+          context: context,
+          featureName: 'Task Breakdown',
+          actionLabel: 'breakdowns',
+          remaining: remaining,
+          total: 7,
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -61,9 +70,21 @@ class _TaskBreakdownSheetState extends ConsumerState<TaskBreakdownSheet> {
             icon: Icons.playlist_add_check_rounded,
           );
         } else {
+          final remaining = await AIService.getRemainingLimit('breakdown', 7);
+          final cooldownLeft = await AIService.getRemainingCooldown('breakdown', const Duration(seconds: 3));
           setState(() {
             _error = ErrorMapper.getAIErrorMessage(e);
           });
+          AISnackBar.showUsage(
+            context: context,
+            featureName: 'Task Breakdown',
+            actionLabel: 'breakdowns',
+            remaining: remaining,
+            total: 7,
+            cooldownLeft: (remaining > 0 && cooldownLeft > Duration.zero) ? cooldownLeft : null,
+            isError: true,
+            errorMessage: ErrorMapper.getAIErrorMessage(e),
+          );
         }
       }
     }

@@ -16,6 +16,7 @@ import '../../../../core/services/ai_service.dart';
 import '../../../../core/utils/error_mapper.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../../../../shared/widgets/premium_promo_dialog.dart';
+import '../../../../shared/widgets/ai_snackbar.dart';
 
 class TaskDetailScreen extends ConsumerStatefulWidget {
   final Task? task;
@@ -73,9 +74,11 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen>
       text: widget.task?.description ?? '',
     );
 
-    _titleController.addListener(_saveTaskDebounced);
     _titleController.addListener(_onTitleChanged);
-    _descriptionController.addListener(_saveTaskDebounced);
+    if (widget.task != null) {
+      _titleController.addListener(_saveTaskDebounced);
+      _descriptionController.addListener(_saveTaskDebounced);
+    }
 
     _sheetController = AnimationController(
       vsync: this,
@@ -85,9 +88,11 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen>
 
   @override
   void dispose() {
-    _titleController.removeListener(_saveTaskDebounced);
     _titleController.removeListener(_onTitleChanged);
-    _descriptionController.removeListener(_saveTaskDebounced);
+    if (widget.task != null) {
+      _titleController.removeListener(_saveTaskDebounced);
+      _descriptionController.removeListener(_saveTaskDebounced);
+    }
     _titleController.dispose();
     _descriptionController.dispose();
     _smartParserController.dispose();
@@ -224,22 +229,34 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen>
           _smartParserController.clear();
         });
         HapticFeedback.mediumImpact();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('AI parsed and applied details successfully!'),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: Color(0xFF9B7CFF),
-          ),
+        final remaining = await AIService.getRemainingLimit('parse', 50);
+        AISnackBar.showUsage(
+          context: context,
+          featureName: 'Smart Task Parser',
+          actionLabel: 'parses',
+          remaining: remaining,
+          total: 50,
         );
-        _saveTask(isDismissing: false);
+        if (widget.task != null) {
+          _saveTask(isDismissing: false);
+        }
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _isParsing = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(ErrorMapper.getAIErrorMessage(e))),
+        final remaining = await AIService.getRemainingLimit('parse', 50);
+        final cooldownLeft = await AIService.getRemainingCooldown('parse', const Duration(seconds: 3));
+        AISnackBar.showUsage(
+          context: context,
+          featureName: 'Smart Task Parser',
+          actionLabel: 'parses',
+          remaining: remaining,
+          total: 50,
+          cooldownLeft: (remaining > 0 && cooldownLeft > Duration.zero) ? cooldownLeft : null,
+          isError: true,
+          errorMessage: ErrorMapper.getAIErrorMessage(e),
         );
       }
     }
@@ -350,14 +367,18 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen>
       }
 
       setState(() => _dueDate = finalDateTime);
-      _saveTask(isDismissing: false);
+      if (widget.task != null) {
+        _saveTask(isDismissing: false);
+      }
     }
   }
 
   void _updatePriority(int level) {
     HapticFeedback.lightImpact();
     setState(() => _priority = level);
-    _saveTask(isDismissing: false);
+    if (widget.task != null) {
+      _saveTask(isDismissing: false);
+    }
   }
 
   @override
@@ -373,7 +394,9 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen>
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) {
           _debounce.dispose();
-          await _saveTask(isDismissing: true);
+          if (widget.task != null) {
+            await _saveTask(isDismissing: true);
+          }
         }
       },
       child: Container(
@@ -760,7 +783,9 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen>
                           onTap: () {
                             HapticFeedback.lightImpact();
                             setState(() => _projectId = proj.id);
-                            _saveTask(isDismissing: false);
+                            if (widget.task != null) {
+                              _saveTask(isDismissing: false);
+                            }
                           },
                         );
                       }).toList(),

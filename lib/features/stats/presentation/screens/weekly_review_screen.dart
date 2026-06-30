@@ -72,8 +72,9 @@ class _WeeklyReviewScreenState extends ConsumerState<WeeklyReviewScreen> {
       }
     } catch (e) {
       if (mounted) {
+        final cleanMsg = ErrorMapper.getAIErrorMessage(e);
         setState(() {
-          _error = ErrorMapper.getAIErrorMessage(e);
+          _error = cleanMsg;
           _loading = false;
         });
       }
@@ -206,8 +207,16 @@ class _WeeklyReviewScreenState extends ConsumerState<WeeklyReviewScreen> {
                                     ),
                                   )
                                 else if (_error != null)
-                                  Text(_error!,
-                                      style: const TextStyle(color: Colors.red))
+                                  Text(
+                                    _error!,
+                                    style: TextStyle(
+                                      color: _error!.toLowerCase().contains('sunday')
+                                          ? theme.textTheme.bodyMedium?.color?.withOpacity(0.7)
+                                          : Colors.red,
+                                      fontSize: 14.sp,
+                                      height: 1.4,
+                                    ),
+                                  )
                                 else
                                   Text(
                                     _summary,

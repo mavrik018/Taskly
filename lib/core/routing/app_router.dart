@@ -12,6 +12,7 @@ import '../../shared/widgets/app_shell.dart';
 import '../../features/stats/presentation/screens/stats_screen.dart';
 import '../../features/stats/presentation/screens/weekly_review_screen.dart';
 import '../../features/auth/presentation/screens/auth_screen.dart';
+import '../../features/auth/presentation/controllers/auth_provider.dart';
 import '../../features/splash/presentation/screens/splash_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -30,7 +31,8 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       if (onboarding == null) return null;
 
-      final isCompleted = onboarding.isCompleted;
+      final isCompleted =
+          onboarding.isCompleted || ref.read(authProvider) != null;
       final goingToOnboarding = location == AppRoutes.onboarding;
 
       if (!isCompleted && !goingToOnboarding) {
@@ -95,6 +97,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 class _RefListener extends ChangeNotifier {
   _RefListener(Ref ref) {
     ref.listen(onboardingProvider, (_, __) => notifyListeners());
+    ref.listen(authProvider, (_, __) => notifyListeners());
   }
 }
 

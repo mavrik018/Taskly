@@ -23,6 +23,7 @@ import '../../../../core/theme/theme_provider.dart';
 import '../../../../core/utils/error_mapper.dart';
 import '../../../../core/utils/streak_manager.dart';
 import '../../../../shared/widgets/premium_promo_dialog.dart';
+import '../../../../shared/widgets/ai_snackbar.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -59,15 +60,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _loadCachedFocusSuggestion() async {
     try {
       final cached = await AIService.getCachedFocusSuggestion();
-      if (mounted && cached != null) {
-        setState(() {
-          _focusSuggestion = cached;
-        });
+      if (mounted) {
+        if (cached != null) {
+          setState(() {
+            _focusSuggestion = cached;
+          });
+        } else {
+          _loadFocusSuggestion();
+        }
       }
     } catch (_) {}
   }
 
-  Future<void> _loadFocusSuggestion() async {
+  Future<void> _loadFocusSuggestion({bool isManual = false}) async {
     setState(() {
       _loadingFocusSuggestion = true;
     });
@@ -84,16 +89,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               })
           .toList();
 
-      final suggestion = await AIService.getDailyFocusSuggestions(pending);
+      final suggestion = await AIService.getDailyFocusSuggestions(pending, isManual: isManual);
       if (mounted) {
         setState(() {
           _focusSuggestion = suggestion;
           _loadingFocusSuggestion = false;
         });
+        if (isManual) {
+          final remaining = await AIService.getRemainingLimit('focus_manual', 5);
+          AISnackBar.showUsage(
+            context: context,
+            featureName: 'Daily Focus',
+            actionLabel: 'manual refreshes',
+            remaining: remaining,
+            total: 5,
+          );
+        }
       }
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         setState(() => _loadingFocusSuggestion = false);
+        final remaining = await AIService.getRemainingLimit('focus_manual', 5);
+        final cooldownLeft = await AIService.getRemainingCooldown('focus_manual', const Duration(seconds: 5));
+        AISnackBar.showUsage(
+          context: context,
+          featureName: 'Daily Focus',
+          actionLabel: 'manual refreshes',
+          remaining: remaining,
+          total: 5,
+          cooldownLeft: (remaining > 0 && cooldownLeft > Duration.zero) ? cooldownLeft : null,
+          isError: true,
+          errorMessage: e.toString().replaceAll('Exception: ', ''),
+        );
       }
     }
   }
@@ -131,7 +158,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         final task = overdueTasks.firstWhere((t) => t.id == item['id']);
         final newDate = DateTime.parse(item['newDueDate']);
         await controller
-            .updateTaskDetails(task.copyWith(dueDate: () => newDate));
+          .updateTaskDetails(task.copyWith(dueDate: () => newDate));
       }
 
       if (mounted) {
@@ -139,16 +166,70 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           _dismissedRescheduleHelper = true;
           _reschedulingTasks = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Overdue tasks rescheduled successfully!')),
+        final remaining = await AIService.getRemainingLimit('reschedule', 5);
+        AISnackBar.showUsage(
+          context: context,
+          featureName: 'Overdue Reschedule',
+          actionLabel: 'AI reschedules',
+          remaining: remaining,
+          total: 5,
         );
       }
     } catch (e) {
+      if (e.toString().contains('LIMIT_REACHED')) {
+        // Local Heuristic Fallback
+        try {
+          final controller = ref.read(tasksControllerProvider.notifier);
+          final now = DateTime.now();
+          final tomorrow = DateTime(now.year, now.month, now.day + 1, 12, 0);
+          final dayAfter = DateTime(now.year, now.month, now.day + 2, 12, 0);
+
+          for (final task in overdueTasks) {
+            DateTime newDate;
+            if (task.priority == 1) { // High Priority
+              newDate = now.add(const Duration(hours: 4)); // Set to today (in 4 hours)
+            } else if (task.priority == 2) { // Medium Priority
+              newDate = tomorrow;
+            } else { // Low / None Priority
+              newDate = dayAfter;
+            }
+            await controller.updateTaskDetails(task.copyWith(dueDate: () => newDate));
+          }
+
+          if (mounted) {
+            setState(() {
+              _dismissedRescheduleHelper = true;
+              _reschedulingTasks = false;
+            });
+            AISnackBar.showUsage(
+              context: context,
+              featureName: 'Overdue Reschedule',
+              actionLabel: 'AI reschedules',
+              remaining: 0,
+              total: 5,
+              isError: true,
+              errorMessage: 'Limit reached — schedule optimised locally',
+            );
+          }
+          return;
+        } catch (localErr) {
+          debugPrint('Local rescheduling fallback failed: $localErr');
+        }
+      }
+
       if (mounted) {
         setState(() => _reschedulingTasks = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(ErrorMapper.getAIErrorMessage(e))),
+        final remaining = await AIService.getRemainingLimit('reschedule', 5);
+        final cooldownLeft = await AIService.getRemainingCooldown('reschedule', const Duration(seconds: 10));
+        AISnackBar.showUsage(
+          context: context,
+          featureName: 'Overdue Reschedule',
+          actionLabel: 'AI reschedules',
+          remaining: remaining,
+          total: 5,
+          cooldownLeft: (remaining > 0 && cooldownLeft > Duration.zero) ? cooldownLeft : null,
+          isError: true,
+          errorMessage: ErrorMapper.getAIErrorMessage(e),
         );
       }
     }
@@ -189,35 +270,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     ref.listen(authProvider, (previous, next) {
       if (next != null && previous == null) {
         _loadFocusSuggestion();
-      }
-    });
-
-    ref.listen<AsyncValue<List<Task>>>(tasksStreamProvider, (previous, next) {
-      if (next is AsyncData<List<Task>>) {
-        final prevList = previous?.value;
-        final nextList = next.value;
-        if (prevList != null) {
-          bool hasChanges = false;
-          if (prevList.length != nextList.length) {
-            hasChanges = true;
-          } else {
-            for (int i = 0; i < prevList.length; i++) {
-              final p = prevList[i];
-              final n = nextList.firstWhere((element) => element.id == p.id,
-                  orElse: () => p);
-              if (n.title != p.title ||
-                  n.priority != p.priority ||
-                  n.dueDate != p.dueDate ||
-                  n.isCompleted != p.isCompleted) {
-                hasChanges = true;
-                break;
-              }
-            }
-          }
-          if (hasChanges) {
-            _loadFocusSuggestion();
-          }
-        }
       }
     });
 
@@ -539,15 +591,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                         ],
                                       ),
                                       IconButton(
-                                        icon: Icon(
-                                          Icons.close,
-                                          size: 18,
-                                          color: isDark
-                                              ? Colors.white70
-                                              : Colors.black54,
-                                        ),
-                                        onPressed: () => setState(() =>
-                                            _dismissedFocusSuggestion = true),
+                                        icon: _loadingFocusSuggestion
+                                            ? SizedBox(
+                                                width: 14.r,
+                                                height: 14.r,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 1.8,
+                                                  color: isDark
+                                                      ? Colors.white70
+                                                      : Colors.black54,
+                                                ),
+                                              )
+                                            : Icon(
+                                                Icons.refresh_rounded,
+                                                size: 18.sp,
+                                                color: isDark
+                                                    ? Colors.white70
+                                                    : Colors.black54,
+                                              ),
+                                        onPressed: _loadingFocusSuggestion
+                                            ? null
+                                            : () => _loadFocusSuggestion(isManual: true),
                                       ),
                                     ],
                                   ),
@@ -573,7 +637,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                         final parsedId =
                                             int.tryParse(id.toString());
                                         final matchedTask = tasks.firstWhere(
-                                          (t) => t.id == parsedId,
+                                          (t) => t.id == parsedId && !t.isCompleted,
                                           orElse: () => Task(
                                               id: -1,
                                               title: '',

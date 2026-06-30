@@ -5,12 +5,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:taskflow/features/onboarding/presentation/controllers/onboarding_provider.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../../../../core/services/sync_service.dart';
+import '../../../../core/services/profile_sync_service.dart';
 import '../../../tasks/presentation/controllers/tasks_provider.dart';
 
 // Provider for Sync Service
 final syncServiceProvider = Provider<SyncService>((ref) {
   final db = ref.watch(databaseProvider);
-  final service = SyncService(db);
+  final service = SyncService(db, ref);
   ref.onDispose(() => service.dispose());
   return service;
 });
@@ -19,7 +20,16 @@ class AuthNotifier extends Notifier<User?> {
   @override
   User? build() {
     _initListener();
-    return SupabaseService.currentUser;
+    final user = SupabaseService.currentUser;
+    if (user != null) {
+      Future.microtask(() async {
+        try {
+          ref.read(syncServiceProvider).sync();
+          await ProfileSyncService.syncAll(ref);
+        } catch (_) {}
+      });
+    }
+    return user;
   }
 
   void _initListener() {
@@ -28,8 +38,8 @@ class AuthNotifier extends Notifier<User?> {
       if (data.session?.user != null) {
         // Trigger sync when user signs in
         ref.read(syncServiceProvider).sync();
-        // Sync profile name
-        await ref.read(onboardingProvider.notifier).syncProfileName();
+        // Sync profile, settings, dark mode, streak
+        await ProfileSyncService.syncAll(ref);
       }
     });
   }

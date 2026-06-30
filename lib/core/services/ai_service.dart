@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'profile_sync_service.dart';
 
 class AIService {
   static bool get _isPremium {
@@ -15,7 +16,6 @@ class AIService {
   // Client-Side Rate & Cooldown Tracker
   static Future<bool> _checkLimitAndTrack(String action, int limitPerDay,
       {Duration? cooldown}) async {
-    return true; // Rate limits disabled for now
     try {
       final prefs = await SharedPreferences.getInstance();
       final now = DateTime.now();
@@ -47,6 +47,9 @@ class AIService {
 
       // 3. Increment usage count
       await prefs.setInt(keyCount, currentCount + 1);
+      try {
+        await ProfileSyncService.pushLocalProfileToCloud();
+      } catch (_) {}
       return true;
     } catch (e) {
       debugPrint('Error evaluating AI rate limits: $e');
@@ -99,7 +102,6 @@ class AIService {
       throw Exception(
           'Failed to parse list of maps from $data (type: ${data.runtimeType})');
     }
-    // Each element may be a Map or a JSON-encoded String (stale cache edge case)
     return raw.map((e) {
       if (e is Map) {
         return Map<String, dynamic>.from(e);
@@ -124,16 +126,20 @@ class AIService {
   }
 
   // 1. Smart Task Parser
-  // Limits: Max 100/day, cooldown of 5s between requests.
+  // Limits: Max 50/day, cooldown of 3s.
   static Future<Map<String, dynamic>> parseTaskTitle(String sentence) async {
     if (!_isPremium) {
       throw Exception('Premium authorization required for Smart Task Parser');
     }
 
-    final allowed = await _checkLimitAndTrack('parse', 100,
-        cooldown: const Duration(seconds: 5));
+    if (sentence.trim().length < 5) {
+      throw Exception('Task title too short to parse.');
+    }
+
+    final allowed = await _checkLimitAndTrack('parse', 50,
+        cooldown: const Duration(seconds: 3));
     if (!allowed) {
-      throw Exception('Rate limit exceeded. Please try again later.');
+      throw Exception('Rate limit exceeded or cooldown active. Please wait.');
     }
 
     final res = await _callEdgeFunction('parse', {
@@ -144,19 +150,73 @@ class AIService {
   }
 
   // 2. Daily Focus Suggestion
-  // Limits: Max 5/day, cooldown of 15 minutes. Returns cached results if limited.
+  // Limits: 1 Auto, 2 Manual per day.
   static Future<Map<String, dynamic>> getDailyFocusSuggestions(
-      List<Map<String, dynamic>> tasks) async {
+      List<Map<String, dynamic>> tasks,
+      {required bool isManual}) async {
     if (!_isPremium) {
       throw Exception('Premium authorization required for Focus Suggestions');
     }
 
-    final prefs = await SharedPreferences.getInstance();
-    final cached = prefs.getString('last_focus_suggestion');
+    final client = Supabase.instance.client;
+    final user = client.auth.currentUser;
+    if (user == null) {
+      throw Exception('User session not found.');
+    }
 
-    final allowed = await _checkLimitAndTrack('focus', 5,
-        cooldown: const Duration(minutes: 15));
+    final now = DateTime.now();
+    final dateStr =
+        "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+
+    // 1. Check Server-Side / Database Cache first (to sync across devices) - Bypass on manual regeneration
+    if (!isManual) {
+      try {
+        final cachedResponse = await client
+            .from('daily_focus_cache')
+            .select('suggestion')
+            .eq('user_id', user.id)
+            .eq('date', dateStr)
+            .order('created_at', ascending: false)
+            .limit(1)
+            .maybeSingle();
+
+        if (cachedResponse != null && cachedResponse['suggestion'] != null) {
+          final suggestionMap =
+              cachedResponse['suggestion'] as Map<String, dynamic>;
+          // Save locally to SharedPreferences cache too
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove('last_focus_suggestion');
+          await prefs.setString(
+              'last_focus_suggestion', jsonEncode(suggestionMap));
+          await prefs.setString('last_focus_suggestion_date', dateStr);
+          return suggestionMap;
+        }
+      } catch (e) {
+        debugPrint('Error reading focus suggestion cache from server: $e');
+      }
+    }
+
+    // 2. Check client-side rate limits/cooldowns
+    final action = isManual ? 'focus_manual' : 'focus_auto';
+    final limit = isManual ? 5 : 1;
+    final cooldown = isManual ? const Duration(seconds: 5) : null;
+
+    final allowed =
+        await _checkLimitAndTrack(action, limit, cooldown: cooldown);
     if (!allowed) {
+      if (isManual) {
+        final prefs = await SharedPreferences.getInstance();
+        final keyCount = 'ai_limit_count_${action}_${now.year}-${now.month}-${now.day}';
+        final currentCount = prefs.getInt(keyCount) ?? 0;
+        if (currentCount >= limit) {
+          throw Exception('Daily suggestion limit reached.');
+        }
+        throw Exception(
+            'Cooldown active. Please wait 5 seconds before regenerating.');
+      }
+      // Return local cache if rate-limited
+      final prefs = await SharedPreferences.getInstance();
+      final cached = prefs.getString('last_focus_suggestion');
       if (cached != null) return jsonDecode(cached) as Map<String, dynamic>;
       throw Exception(
           'Rate limit exceeded. Please wait before refreshing Suggestions.');
@@ -164,16 +224,46 @@ class AIService {
 
     final res = await _callEdgeFunction('focus', {
       'tasks': tasks,
-      'currentDate': DateTime.now().toIso8601String(),
+      'currentDate': now.toIso8601String(),
     });
 
     final map = _parseMap(res);
-    await prefs.setString('last_focus_suggestion', jsonEncode(map));
+
+    // 3. Save to Local Cache
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('last_focus_suggestion');
+      await prefs.setString('last_focus_suggestion', jsonEncode(map));
+      await prefs.setString('last_focus_suggestion_date', dateStr);
+      try {
+        await ProfileSyncService.pushLocalProfileToCloud();
+      } catch (_) {}
+    } catch (_) {}
+
+    // 4. Save to Server-Side Cache
+    try {
+      await client.from('daily_focus_cache').insert({
+        'user_id': user.id,
+        'date': dateStr,
+        'suggestion': map,
+      });
+    } catch (e) {
+      debugPrint('Error saving focus suggestion cache to server: $e');
+    }
+
     return map;
   }
 
   static Future<Map<String, dynamic>?> getCachedFocusSuggestion() async {
     final prefs = await SharedPreferences.getInstance();
+    final now = DateTime.now();
+    final dateStr =
+        "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+    final cachedDate = prefs.getString('last_focus_suggestion_date');
+    if (cachedDate != dateStr) {
+      // Stale cache from a previous day
+      return null;
+    }
     final cached = prefs.getString('last_focus_suggestion');
     if (cached != null) {
       try {
@@ -183,27 +273,74 @@ class AIService {
     return null;
   }
 
+  static String _simpleHash(String input) {
+    int hash = 0;
+    for (int i = 0; i < input.length; i++) {
+      hash = (31 * hash + input.codeUnitAt(i)) & 0xFFFFFFFF;
+    }
+    return hash.toRadixString(16);
+  }
+
   // 3. Task Breakdown Assistant
-  // Limits: Max 15/day, cooldown of 10s.
-  static Future<List<String>> breakDownTask(String taskTitle) async {
+  // Limits: Max 15/day, cooldown of 3s.
+  static Future<List<String>> breakDownTask(
+      String taskId, String taskTitle) async {
     if (!_isPremium) {
       throw Exception('Premium authorization required for Task Breakdown');
     }
 
-    final allowed = await _checkLimitAndTrack('breakdown', 15,
-        cooldown: const Duration(seconds: 10));
+    final titleHash = _simpleHash(taskTitle);
+    final cacheKey = 'breakdown_${taskId}_$titleHash';
+
+    // Check SharedPreferences cache
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cached = prefs.getString(cacheKey);
+      if (cached != null) {
+        final decoded = jsonDecode(cached);
+        if (decoded is List) {
+          return decoded.map((e) => e.toString()).toList();
+        }
+      }
+    } catch (e) {
+      debugPrint('Error reading breakdown cache: $e');
+    }
+
+    // Check Limit & Cooldown
+    final allowed = await _checkLimitAndTrack('breakdown', 7,
+        cooldown: const Duration(seconds: 3));
     if (!allowed) {
-      throw Exception('Rate limit exceeded. Please wait a moment.');
+      throw Exception(
+          'Rate limit exceeded or cooldown active. Please wait a moment.');
     }
 
     final res = await _callEdgeFunction('breakdown', {
       'taskTitle': taskTitle,
     });
-    return _parseList(res);
+    final list = _parseList(res);
+
+    // Save to SharedPreferences cache
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(cacheKey, jsonEncode(list));
+      try {
+        await ProfileSyncService.pushLocalProfileToCloud();
+      } catch (_) {}
+    } catch (_) {}
+
+    return list;
   }
 
-  // 4. Weekly Review Summary
-  // Limits: Max 3/day, cooldown of 1 hour. Returns cached results if limited.
+  static String _getIsoWeekKey(String userId) {
+    final date = DateTime.now();
+    final dayNb = (date.weekday - 1) % 7;
+    final closestThursday = date.subtract(Duration(days: dayNb - 3));
+    final firstDayOfYear = DateTime(closestThursday.year, 1, 1);
+    final weekNumber =
+        (((closestThursday.difference(firstDayOfYear).inDays) / 7).floor() + 1);
+    return 'weekly_${userId}_${closestThursday.year}_W$weekNumber';
+  }
+
   static Future<String> getWeeklyReviewSummary(
     List<Map<String, dynamic>> completedTasks,
     List<Map<String, dynamic>> overdueTasks,
@@ -212,22 +349,37 @@ class AIService {
       throw Exception('Premium authorization required for Weekly Review');
     }
 
-    final prefs = await SharedPreferences.getInstance();
-    final cached = prefs.getString('last_weekly_review');
+    final client = Supabase.instance.client;
+    final user = client.auth.currentUser;
+    if (user == null) {
+      throw Exception('User session not found.');
+    }
 
-    final allowed = await _checkLimitAndTrack('weekly', 3,
-        cooldown: const Duration(hours: 1));
-    if (!allowed) {
+    final prefs = await SharedPreferences.getInstance();
+    final now = DateTime.now();
+    final isSunday = now.weekday == DateTime.sunday;
+    final todayStr = "${now.year}-${now.month}-${now.day}";
+    final lastGeneratedSunday = prefs.getString('last_generated_sunday');
+
+    // 1. Check Local Cache
+    if (isSunday) {
+      if (lastGeneratedSunday == todayStr) {
+        final cached = prefs.getString('last_weekly_review');
+        if (cached != null) return cached;
+      }
+    } else {
+      final cached = prefs.getString('last_weekly_review');
       if (cached != null) return cached;
       throw Exception(
-          'Rate limit exceeded. Please wait before requesting Weekly wrap-up.');
+          'Weekly AI Review is only generated on Sundays. No summary is available yet.');
     }
 
     final res = await _callEdgeFunction('weekly', {
       'completedTasks': completedTasks,
       'overdueTasks': overdueTasks,
-      'currentDate': DateTime.now().toIso8601String(),
+      'currentDate': now.toIso8601String(),
     });
+
     String summary;
     if (res is String) {
       summary = res;
@@ -237,12 +389,20 @@ class AIService {
       summary = res.toString();
     }
 
-    await prefs.setString('last_weekly_review', summary);
+    // Save to Cache
+    try {
+      await prefs.setString('last_weekly_review', summary);
+      await prefs.setString('last_generated_sunday', todayStr);
+      try {
+        await ProfileSyncService.pushLocalProfileToCloud();
+      } catch (_) {}
+    } catch (_) {}
+
     return summary;
   }
 
   // 5. Overdue Task Reschedule Helper
-  // Limits: Max 5/day, cooldown of 1 minute.
+  // Limits: Max 5/day, cooldown of 10 seconds.
   static Future<List<Map<String, dynamic>>> rescheduleOverdueTasks(
     List<Map<String, dynamic>> overdueTasks,
   ) async {
@@ -251,9 +411,9 @@ class AIService {
     }
 
     final allowed = await _checkLimitAndTrack('reschedule', 5,
-        cooldown: const Duration(minutes: 1));
+        cooldown: const Duration(seconds: 10));
     if (!allowed) {
-      throw Exception('Rate limit exceeded. Please wait a minute.');
+      throw Exception('LIMIT_REACHED');
     }
 
     final res = await _callEdgeFunction('reschedule', {
@@ -261,5 +421,35 @@ class AIService {
       'currentDate': DateTime.now().toIso8601String(),
     });
     return _parseListMap(res);
+  }
+
+  static Future<int> getRemainingLimit(String action, int limitPerDay) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final now = DateTime.now();
+      final dateStr = "${now.year}-${now.month}-${now.day}";
+      final keyCount = 'ai_limit_count_${action}_$dateStr';
+      final currentCount = prefs.getInt(keyCount) ?? 0;
+      return (limitPerDay - currentCount).clamp(0, limitPerDay);
+    } catch (_) {
+      return limitPerDay;
+    }
+  }
+
+  static Future<Duration> getRemainingCooldown(
+      String action, Duration cooldown) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keyLastTime = 'ai_limit_last_time_$action';
+      final lastTimeStr = prefs.getString(keyLastTime);
+      if (lastTimeStr != null) {
+        final lastTime = DateTime.parse(lastTimeStr);
+        final elapsed = DateTime.now().difference(lastTime);
+        if (elapsed < cooldown) {
+          return cooldown - elapsed;
+        }
+      }
+    } catch (_) {}
+    return Duration.zero;
   }
 }

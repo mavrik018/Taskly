@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/services/supabase_service.dart';
+import '../../../../core/services/profile_sync_service.dart';
 
 class OnboardingState {
   final bool isCompleted;
@@ -28,8 +29,15 @@ class OnboardingController extends AsyncNotifier<OnboardingState> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_completedKey, true);
       await prefs.setString(_nameKey, name);
+      try {
+        await ProfileSyncService.pushLocalProfileToCloud();
+      } catch (_) {}
       return OnboardingState(isCompleted: true, userName: name);
     });
+  }
+
+  void setOnboardingState({required bool completed, required String name}) {
+    state = AsyncValue.data(OnboardingState(isCompleted: completed, userName: name));
   }
 
   Future<void> updateUserName(String name) async {
