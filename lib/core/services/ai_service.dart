@@ -331,14 +331,14 @@ class AIService {
     return list;
   }
 
-  static String _getIsoWeekKey(String userId) {
-    final date = DateTime.now();
-    final dayNb = (date.weekday - 1) % 7;
-    final closestThursday = date.subtract(Duration(days: dayNb - 3));
-    final firstDayOfYear = DateTime(closestThursday.year, 1, 1);
-    final weekNumber =
-        (((closestThursday.difference(firstDayOfYear).inDays) / 7).floor() + 1);
-    return 'weekly_${userId}_${closestThursday.year}_W$weekNumber';
+  static bool isSameCalendarWeek(DateTime date1, DateTime date2) {
+    final monday1 = DateTime(date1.year, date1.month, date1.day)
+        .subtract(Duration(days: date1.weekday - 1));
+    final monday2 = DateTime(date2.year, date2.month, date2.day)
+        .subtract(Duration(days: date2.weekday - 1));
+    return monday1.year == monday2.year &&
+        monday1.month == monday2.month &&
+        monday1.day == monday2.day;
   }
 
   static Future<String> getWeeklyReviewSummary(
@@ -357,21 +357,15 @@ class AIService {
 
     final prefs = await SharedPreferences.getInstance();
     final now = DateTime.now();
-    final isSunday = now.weekday == DateTime.sunday;
-    final todayStr = "${now.year}-${now.month}-${now.day}";
-    final lastGeneratedSunday = prefs.getString('last_generated_sunday');
+    final timeStr = prefs.getString('last_weekly_review_time');
 
-    // 1. Check Local Cache
-    if (isSunday) {
-      if (lastGeneratedSunday == todayStr) {
+    if (timeStr != null) {
+      final lastGenerated = DateTime.parse(timeStr);
+      if (isSameCalendarWeek(lastGenerated, now)) {
         final cached = prefs.getString('last_weekly_review');
         if (cached != null) return cached;
+        throw Exception('WEEKLY_LIMIT_REACHED');
       }
-    } else {
-      final cached = prefs.getString('last_weekly_review');
-      if (cached != null) return cached;
-      throw Exception(
-          'Weekly AI Review is only generated on Sundays. No summary is available yet.');
     }
 
     final res = await _callEdgeFunction('weekly', {
@@ -392,7 +386,7 @@ class AIService {
     // Save to Cache
     try {
       await prefs.setString('last_weekly_review', summary);
-      await prefs.setString('last_generated_sunday', todayStr);
+      await prefs.setString('last_weekly_review_time', now.toIso8601String());
       try {
         await ProfileSyncService.pushLocalProfileToCloud();
       } catch (_) {}

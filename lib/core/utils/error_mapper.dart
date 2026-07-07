@@ -59,8 +59,8 @@ class ErrorMapper {
       return 'This feature requires a premium subscription.';
     }
 
-    if (msg.contains('sunday') || msg.contains('weekly')) {
-      return 'Weekly AI Review is only generated on Sundays. No summary is available yet.';
+    if (msg.contains('weekly_limit_reached')) {
+      return 'You have already generated your weekly summary for this week. Please wait until next week to generate a new one.';
     }
 
     return 'Could not process AI request at this moment. Please try again.';

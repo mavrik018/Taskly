@@ -4,9 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../tasks/presentation/controllers/tasks_provider.dart';
 import '../../../../core/services/ai_service.dart';
-import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/utils/error_mapper.dart';
 
@@ -21,13 +22,48 @@ class _WeeklyReviewScreenState extends ConsumerState<WeeklyReviewScreen> {
   String _summary = '';
   bool _loading = false;
   String? _error;
+  DateTime? _generatedTime;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _generateWeeklyReview();
+      _loadCachedSummary();
     });
+  }
+
+  Future<void> _loadCachedSummary() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cached = prefs.getString('last_weekly_review');
+      final timeStr = prefs.getString('last_weekly_review_time');
+
+      if (cached != null && timeStr != null) {
+        final generatedTime = DateTime.parse(timeStr);
+        final now = DateTime.now();
+
+        if (AIService.isSameCalendarWeek(generatedTime, now)) {
+          setState(() {
+            _summary = cached;
+            _generatedTime = generatedTime;
+            _loading = false;
+          });
+          return;
+        }
+      }
+      setState(() {
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _loading = false;
+        _error = 'Failed to load cached summary.';
+      });
+    }
   }
 
   Future<void> _generateWeeklyReview() async {
@@ -42,10 +78,11 @@ class _WeeklyReviewScreenState extends ConsumerState<WeeklyReviewScreen> {
       final oneWeekAgo = now.subtract(const Duration(days: 7));
 
       final completedTasks = tasks
-          .where((t) =>
-              t.isCompleted &&
-              t.dueDate != null &&
-              t.dueDate!.isAfter(oneWeekAgo))
+          .where((t) {
+            if (!t.isCompleted) return false;
+            final compareDate = t.completedAt ?? t.dueDate;
+            return compareDate != null && compareDate.isAfter(oneWeekAgo);
+          })
           .map((t) => {
                 'title': t.title,
                 'priority': t.priority,
@@ -67,6 +104,7 @@ class _WeeklyReviewScreenState extends ConsumerState<WeeklyReviewScreen> {
       if (mounted) {
         setState(() {
           _summary = summary;
+          _generatedTime = now;
           _loading = false;
         });
       }
@@ -202,30 +240,162 @@ class _WeeklyReviewScreenState extends ConsumerState<WeeklyReviewScreen> {
                                     child: Padding(
                                       padding: const EdgeInsets.symmetric(
                                           vertical: 24.0),
-                                      child: CircularProgressIndicator(
-                                          color: accent),
+                                      child: Column(
+                                        children: [
+                                          CircularProgressIndicator(
+                                              color: accent),
+                                          SizedBox(height: 12.h),
+                                          Text(
+                                            'Analyzing your week...',
+                                            style: TextStyle(
+                                              fontSize: 13.sp,
+                                              color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   )
                                 else if (_error != null)
-                                  Text(
-                                    _error!,
-                                    style: TextStyle(
-                                      color: _error!.toLowerCase().contains('sunday')
-                                          ? theme.textTheme.bodyMedium?.color?.withOpacity(0.7)
-                                          : Colors.red,
-                                      fontSize: 14.sp,
-                                      height: 1.4,
-                                    ),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      Text(
+                                        _error!,
+                                        style: TextStyle(
+                                          color: Colors.red,
+                                          fontSize: 14.sp,
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                      if (!_error!.contains('already generated')) ...[
+                                        SizedBox(height: 12.h),
+                                        ElevatedButton(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: accent,
+                                            foregroundColor: onAccent,
+                                            elevation: 0,
+                                            padding: EdgeInsets.symmetric(vertical: 12.h),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(12.r),
+                                            ),
+                                          ),
+                                          onPressed: _generateWeeklyReview,
+                                          child: const Text('Retry'),
+                                        ),
+                                      ],
+                                    ],
+                                  )
+                                else if (_summary.isEmpty)
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      Text(
+                                        'Ready for your weekly wrap-up?',
+                                        style: TextStyle(
+                                          fontSize: 16.sp,
+                                          fontWeight: FontWeight.bold,
+                                          color: theme.textTheme.bodyLarge?.color,
+                                        ),
+                                      ),
+                                      SizedBox(height: 8.h),
+                                      Text(
+                                        'Generate a personalized AI summary of your productivity, achievements, and focus areas over the last 7 days.',
+                                        style: TextStyle(
+                                          fontSize: 13.sp,
+                                          color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                      SizedBox(height: 16.h),
+                                      Container(
+                                        padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+                                        decoration: BoxDecoration(
+                                          color: accent.withOpacity(0.05),
+                                          borderRadius: BorderRadius.circular(10.r),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.calendar_today_rounded, size: 14.sp, color: accent.withOpacity(0.7)),
+                                            SizedBox(width: 8.w),
+                                            Text(
+                                              'Period: ${DateFormat.yMMMd().format(DateTime.now().subtract(const Duration(days: 7)))} – ${DateFormat.yMMMd().format(DateTime.now())}',
+                                              style: TextStyle(
+                                                fontSize: 12.sp,
+                                                fontWeight: FontWeight.w500,
+                                                color: theme.textTheme.bodyMedium?.color?.withOpacity(0.8),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      SizedBox(height: 20.h),
+                                      ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: accent,
+                                          foregroundColor: onAccent,
+                                          elevation: 0,
+                                          padding: EdgeInsets.symmetric(vertical: 14.h),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(14.r),
+                                          ),
+                                        ),
+                                        onPressed: _generateWeeklyReview,
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.auto_awesome_rounded, size: 18.sp),
+                                            SizedBox(width: 8.w),
+                                            Text(
+                                              'Generate Summary',
+                                              style: TextStyle(
+                                                fontSize: 15.sp,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                   )
                                 else
-                                  Text(
-                                    _summary,
-                                    style: TextStyle(
-                                      fontSize: 15.sp,
-                                      height: 1.45,
-                                      color: theme.textTheme.bodyLarge?.color
-                                          ?.withOpacity(0.9),
-                                    ),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      if (_generatedTime != null)
+                                        Container(
+                                          margin: EdgeInsets.only(bottom: 12.h),
+                                          padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+                                          decoration: BoxDecoration(
+                                            color: accent.withOpacity(0.05),
+                                            borderRadius: BorderRadius.circular(10.r),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.calendar_today_rounded, size: 14.sp, color: accent.withOpacity(0.7)),
+                                              SizedBox(width: 8.w),
+                                              Text(
+                                                'Period: ${DateFormat.yMMMd().format(_generatedTime!.subtract(const Duration(days: 7)))} – ${DateFormat.yMMMd().format(_generatedTime!)}',
+                                                style: TextStyle(
+                                                  fontSize: 12.sp,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: theme.textTheme.bodyMedium?.color?.withOpacity(0.8),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      Text(
+                                        _summary,
+                                        style: TextStyle(
+                                          fontSize: 15.sp,
+                                          height: 1.45,
+                                          color: theme.textTheme.bodyLarge?.color
+                                              ?.withOpacity(0.9),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                               ],
                             ),
